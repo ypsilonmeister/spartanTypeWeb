@@ -1,73 +1,77 @@
-# React + TypeScript + Vite
+# SpartanType Web
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+ブラウザ完結型・インストール不要のスパルタ式運指矯正Webアプリケーション **SpartanType Web** です。
 
-Currently, two official plugins are available:
+単に「正しいキーを押したか」だけでなく、Webカメラを通じた画像認識（MediaPipe）技術を用いて**「正しい指でキーを押したか」まで厳密に評価・矯正する**ことを目的としたトレーニング環境を提供します。
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+---
 
-## React Compiler
+## 🚀 主な機能要件
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### 1. スパルタ指使い判定 & 減点システム
+* カメラを通じてユーザーの手および指先の骨格（21個の3D関節）を追跡し、キーボードレイアウトごとに定義された「担当指」と、実際に打鍵した「動作指」を照合。
+* 担当外の指での打鍵（例: 中指で押すべきキーを人差し指で手を伸ばして押すなど）を検知すると、エラーとして判定・減点されます。
 
-## Expanding the ESLint configuration
+### 2. 事後解析（非同期ビデオ判定）によるゼロ・レイテンシ設計
+* タイピング中の画像認識処理によるミリ秒単位のタイピングリズム阻害を防ぐため、セッション中は映像の録画と打鍵ログの記録（タイムスタンプ）に専念。
+* セッション終了後にバックグラウンド（Web Workers & WebCodecs API）で「ビデオ判定・フォーム解析」を非同期実行します。
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### 3. 射影変換（ホモグラフィ）によるキーボードマッピングキャリブレーション
+* ユーザーのカメラの傾きやキーボードの配置ズレを数学的に補正するため、射影変換（ホモグラフィ行列）を採用。
+* 初期に「四隅の特定のキー」を順番に打鍵するだけで、カメラ座標とキー配列の座標を自動で投影マッピングします。
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### 4. 振り返りダッシュボード & 癖の自動ラベリング
+* **エラーヒートマップ**: どのキーで誤った指使いが多く発生しているかを可視化。
+* **分類学アプローチによる癖のラベリング**: 「人差し指・過干渉型 (Index Overreach)」「小指・サボり型 (Pinky Avoidance)」など、ユーザー特有の悪癖パターンを客観的に特定・ラベリングします。
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### 5. 知的好奇心を刺激する植物分類ツリーのタイピングドリル
+* 植物分類学の系統構造（科 ➔ 属 ➔ 種）をローマ字でドリルダウン入力。
+* 正しい運指でタイピングを重ねるごとに、画面上の Canvas Bioluminescent Tree（サイバー植物ツリー）が美しく成長・枝分かれし、コンボ（連続正解）によって発光します。
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+---
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 🛠️ 技術スタック
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+* **開発基盤 / ビルダー**: Vite, package.json
+* **言語**: TypeScript
+* **UIフレームワーク**: React (状態管理と静的UI)
+* **スタイリング**: Vanilla CSS (CSSカスタムプロパティを用いた Glassmorphism & Cyber Dark デザイン)
+* **ハンドトラッキング**: MediaPipe Tasks Vision (Web)
+* **描画エンジン**: HTML5 Canvas (原生的な `requestAnimationFrame` ループによる高パフォーマンス描画)
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+---
+
+## 📦 クイックスタート
+
+### 動作要件
+* Node.js v18 以上
+
+### 起動手順
+
+1. 依存関係のインストール:
+   ```bash
+   npm install
+   ```
+
+2. 開発サーバーの起動:
+   ```bash
+   npm run dev
+   ```
+
+3. ブラウザでアクセスします (例: `http://localhost:5173`)。
+
+---
+
+## 🤖 AIエージェント開発用ガイド（CLAUDE.md / gemini.md / antigravity.md）
+
+このリポジトリには、AIアシスタント（Claude Code や Gemini 等）がプロジェクトのルール、コマンド、およびコーディングスタイルを即座に把握し、開発を加速させるための定義ファイルが含まれています。
+
+* **[CLAUDE.md](CLAUDE.md) / [claude.md](claude.md)**: Claude Code 用のリファレンス。
+* **[gemini.md](gemini.md)**: Gemini 用のリファレンス。
+* **[antigravity.md](antigravity.md) / [ANTIGRAVITY.md](ANTIGRAVITY.md)**: Antigravity用のエージェント指示＆プランニング規約。
+
+### 自動開発・テスト用カスタムスキル ( `.claude/` に格納)
+マニフェストファイル [plugin.json](.claude/plugin.json) に基づき、以下のコマンド（スキル）が拡張定義されています：
+* `/spartan-custom:e2e-verify` (E2Eテストスキル): `browser_subagent` を使い、ブラウザ上での遷移や動作を全自動検証。
+* `/spartan-custom:verify-homography` (数学エンジン検証): `scripts/verify_homography.cjs` を実行して DLT 幾何投影計算をチェック。
+* `/spartan-custom:generate-dictionary` (植物分類語彙ジェネレーター): リストから `plantDictionary.ts` データを自動生成。
