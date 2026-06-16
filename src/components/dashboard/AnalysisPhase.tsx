@@ -51,10 +51,6 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
       canvas.height = video.videoHeight;
       
       setStatus('Analyzing frames...');
-      // Play back fast for analysis
-      video.playbackRate = 1.0; 
-      video.play();
-      console.log("[Analysis] Video playback started.");
       
       const dummyEngine = new TypingEngine(layout, unanalyzedData.homography);
       dummyEngine.startSession(); 
@@ -62,6 +58,7 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
       let pendingFrames = 0;
       let lastProcessedTime = -1;
       let frameCounter = 0;
+      let isFinalized = false;
 
       const handleWorkerMessage = (e: MessageEvent) => {
         if (e.data.type === 'DETECT_RESULT') {
@@ -94,23 +91,40 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
 
       worker.addEventListener('message', handleWorkerMessage);
 
+      const finalize = () => {
+        if (isFinalized) return;
+        if (pendingFrames > 0) {
+          console.log(`[Analysis] Finalizing queued. Waiting for ${pendingFrames} pending frames to resolve...`);
+          setTimeout(finalize, 100);
+          return;
+        }
+        isFinalized = true;
+        
+        worker.removeEventListener('message', handleWorkerMessage);
+        video.removeEventListener('ended', handleVideoEnded);
+        URL.revokeObjectURL(url);
+        
+        setStatus('Finalizing session data...');
+        console.log(`[Analysis] Frame processing complete. Total analyzed frames: ${frameCounter}. Exporting session JSON...`);
+        dummyEngine.loadKeystrokes(unanalyzedData.keystrokes);
+        const finalJson = dummyEngine.exportSession();
+        onAnalysisComplete(JSON.parse(finalJson));
+      };
+
+      const handleVideoEnded = () => {
+        console.log("[Analysis] Video ended event fired. Finalizing...");
+        finalize();
+      };
+
+      video.addEventListener('ended', handleVideoEnded);
+
+      // Play back fast for analysis
+      video.playbackRate = 1.0; 
+      video.play();
+      console.log("[Analysis] Video playback started.");
+
       const processVideoFrame = () => {
         if (video.paused || video.ended) {
-          const finalize = () => {
-            if (pendingFrames > 0) {
-              setTimeout(finalize, 100);
-              return;
-            }
-            
-            worker.removeEventListener('message', handleWorkerMessage);
-            URL.revokeObjectURL(url);
-            
-            setStatus('Finalizing session data...');
-            console.log(`[Analysis] Frame processing complete. Total analyzed frames: ${frameCounter}. Exporting session JSON...`);
-            dummyEngine.loadKeystrokes(unanalyzedData.keystrokes);
-            const finalJson = dummyEngine.exportSession();
-            onAnalysisComplete(JSON.parse(finalJson));
-          };
           finalize();
           return;
         }
