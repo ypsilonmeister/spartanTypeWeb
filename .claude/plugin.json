@@ -1,0 +1,7 @@
+{
+  "name": "spartan-custom",
+  "description": "Custom developer skills for SpartanType Web to automate E2E browser tests, validate projective transformation math, and build dictionaries",
+  "version": "1.0.0",
+  "skills": "./skills",
+  "defaultEnabled": true
+}

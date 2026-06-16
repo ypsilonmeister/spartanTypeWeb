@@ -1,5 +1,5 @@
 {
-  "name": "temp-vite",
+  "name": "spartan-type-web",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@mediapipe/tasks-vision": "^0.10.35",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },

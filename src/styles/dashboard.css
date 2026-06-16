@@ -1,0 +1,168 @@
+.dashboard-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1000px;
+  gap: 2rem;
+  color: #fff;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #333;
+  padding-bottom: 1rem;
+}
+
+.dashboard-header h2 {
+  margin: 0;
+  font-weight: 400;
+  letter-spacing: 1px;
+}
+
+.upload-btn {
+  background: #00adb5;
+  color: white;
+  padding: 0.6rem 1.2rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: opacity 0.2s;
+  display: inline-block;
+}
+
+.upload-btn:hover {
+  opacity: 0.8;
+}
+
+.error-banner {
+  background: rgba(255, 68, 68, 0.1);
+  border: 1px solid #ff4444;
+  color: #ff4444;
+  padding: 1rem;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 4rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed #444;
+  border-radius: 12px;
+  color: #888;
+}
+
+.dashboard-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.top-row {
+  display: flex;
+  gap: 2rem;
+}
+
+.dashboard-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 1.5rem;
+  flex: 1;
+}
+
+.dashboard-card h3 {
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  font-size: 1.2rem;
+  color: #ddd;
+}
+
+/* Score Summary */
+.score-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  text-align: center;
+}
+
+.score-item {
+  background: rgba(0, 0, 0, 0.2);
+  padding: 1.5rem 1rem;
+  border-radius: 8px;
+}
+
+.score-value {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #00adb5;
+  margin-bottom: 0.5rem;
+}
+
+.score-label {
+  font-size: 0.85rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Habit Analyzer */
+.no-habits {
+  color: #00ff00;
+  font-weight: bold;
+}
+
+.habit-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.habit-item {
+  background: rgba(255, 68, 68, 0.1);
+  border-left: 4px solid #ff4444;
+  padding: 1rem;
+  border-radius: 0 8px 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.habit-badge {
+  font-weight: bold;
+  color: #ffaa00;
+}
+
+.habit-desc {
+  font-size: 0.9rem;
+  color: #ccc;
+}
+
+.habit-count {
+  font-size: 0.8rem;
+  color: #888;
+}
+
+/* Heatmap Section */
+.heatmap-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.heatmap-section .subtitle {
+  color: #888;
+  margin: 0;
+}
+
+.virtual-key .key-stats {
+  display: block;
+  margin-top: 4px;
+  font-weight: bold;
+}

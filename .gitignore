@@ -25,3 +25,6 @@ dist-ssr
 
 # Gemini / AI agent directories
 .gemini/
+
+# Recorded typing session logs (may contain keystroke data)
+spartan-session-*.json
