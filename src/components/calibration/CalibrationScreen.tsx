@@ -345,10 +345,10 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
               try {
                 const invMatrix = computeHomography(cornersList, physicalPoints);
                 if (invMatrix) {
-                  const tl = applyHomography(invMatrix, { x: 0, y: 0 });
-                  const tr = applyHomography(invMatrix, { x: cornersList[1].x, y: cornersList[1].y });
-                  const br = applyHomography(invMatrix, { x: cornersList[2].x, y: cornersList[2].y });
-                  const bl = applyHomography(invMatrix, { x: cornersList[3].x, y: cornersList[3].y });
+                  const tl = applyHomography(invMatrix, cornersList[0]);
+                  const tr = applyHomography(invMatrix, cornersList[1]);
+                  const br = applyHomography(invMatrix, cornersList[2]);
+                  const bl = applyHomography(invMatrix, cornersList[3]);
 
                   ctx.beginPath();
                   ctx.moveTo(tl.x, tl.y);
