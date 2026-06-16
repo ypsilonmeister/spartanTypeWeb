@@ -11,6 +11,8 @@ interface VirtualKeyboardProps {
   gap?: number;
   /** Points to overlay on the keyboard (in layout coordinate space U) */
   pointers?: { x: number, y: number }[];
+  /** Calibrated home position anchors to show on screen */
+  homePointers?: { x: number, y: number }[];
   /** Currently pressed physical key code to highlight */
   activeKeyCode?: string | null;
   /** Expected key index in the layout to highlight for calibration guidance */
@@ -22,6 +24,7 @@ export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
   unitSize = 48, // Default 48px per 1U
   gap = 4,
   pointers = [],
+  homePointers = [],
   activeKeyCode = null,
   targetKeyIndex = null,
 }) => {
@@ -94,6 +97,26 @@ export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
             transform: 'translate(-50%, -50%)',
             boxShadow: '0 0 10px #00ffff',
             zIndex: 10,
+            pointerEvents: 'none',
+          }}
+        />
+      ))}
+
+      {/* Draw home pointers (neon targeting rings) */}
+      {homePointers.map((p, i) => (
+        <div
+          key={`home-pointer-${i}`}
+          style={{
+            position: 'absolute',
+            left: p.x * unitSize,
+            top: p.y * unitSize,
+            width: '24px',
+            height: '24px',
+            border: '2.5px double #00ff88',
+            borderRadius: '50%',
+            transform: 'translate(-50%, -50%)',
+            boxShadow: '0 0 12px rgba(0, 255, 136, 0.9)',
+            zIndex: 9,
             pointerEvents: 'none',
           }}
         />

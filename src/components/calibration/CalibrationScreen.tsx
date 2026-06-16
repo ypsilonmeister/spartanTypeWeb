@@ -18,7 +18,7 @@ interface CalibrationScreenProps {
 
 type CalibrationPhase = 'detection' | 'detectionConfirm' | 'align' | 'complete';
 
-export function getLayoutCorners(layout: KeyboardLayout) {
+function getLayoutCorners(layout: KeyboardLayout) {
   if (!layout.isSplit) {
     return {
       left: [
@@ -53,7 +53,7 @@ export function getLayoutCorners(layout: KeyboardLayout) {
   };
 }
 
-export function findClosestKeyIndex(layout: KeyboardLayout, target: Point): number {
+function findClosestKeyIndex(layout: KeyboardLayout, target: Point): number {
   let minDistance = Infinity;
   let closestIndex = -1;
   for (let i = 0; i < layout.keys.length; i++) {
@@ -103,6 +103,35 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
   // Homography calculations
   const [computedHomography, setComputedHomography] = useState<CalibrationHomography | null>(null);
 
+  // Calibrated home position pointers
+  const homePointers = useMemo<Point[]>(() => {
+    if (!computedHomography || alignPoints.length < 6) return [];
+    try {
+      if ('isSplit' in computedHomography && computedHomography.isSplit) {
+        if (alignPoints.length < 10) return [];
+        const leftMatrix = computedHomography.left;
+        const rightMatrix = computedHomography.right;
+        const leftF = alignPoints[4];
+        const rightJ = alignPoints[9];
+        return [
+          applyHomography(leftMatrix, leftF),
+          applyHomography(rightMatrix, rightJ)
+        ];
+      } else {
+        const matrix = computedHomography as HomographyMatrix;
+        const f = alignPoints[4];
+        const j = alignPoints[5];
+        return [
+          applyHomography(matrix, f),
+          applyHomography(matrix, j)
+        ];
+      }
+    } catch (e) {
+      console.error("Failed to map home pointers", e);
+      return [];
+    }
+  }, [computedHomography, alignPoints]);
+
   // Step 1: Layout Auto-Detection config
   const [detectionStep, setDetectionStep] = useState(0);
   const DETECTION_KEYS = useMemo(() => [
@@ -124,12 +153,19 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
 
   // Expected calibration steps based on selected layout
   const alignSteps = useMemo(() => {
+    const fKey = activeLayout.keys.find(k => k.label.toLowerCase().split('\n').includes('f'));
+    const jKey = activeLayout.keys.find(k => k.label.toLowerCase().split('\n').includes('j'));
+    const fTarget = fKey ? { x: fKey.x + fKey.w / 2, y: fKey.y + fKey.h / 2 } : { x: 4.5, y: 2.5 };
+    const jTarget = jKey ? { x: jKey.x + jKey.w / 2, y: jKey.y + jKey.h / 2 } : { x: 7.5, y: 2.5 };
+
     if (!activeLayout.isSplit) {
       return [
         { label: '左上端 (Top-Left)', desc: '物理キーボードの「左上端」の角にあるキー（例: Esc や 1）を人差し指で押してください。', target: activeCorners.left[0] },
         { label: '右上端 (Top-Right)', desc: '物理キーボードの「右上端」の角にあるキー（例: Backspace や ￥）を人差し指で押してください。', target: activeCorners.left[1] },
         { label: '右下端 (Bottom-Right)', desc: '物理キーボードの「右下端」の角にあるキー（例: Ctrl や 矢印キー）を人差し指で押してください。', target: activeCorners.left[2] },
-        { label: '左下端 (Bottom-Left)', desc: '物理キーボードの「左下端」の角にあるキー（例: Ctrl や Shift）を人差し指で押してください。', target: activeCorners.left[3] }
+        { label: '左下端 (Bottom-Left)', desc: '物理キーボードの「左下端」の角にあるキー（例: Ctrl や Shift）を人差し指で押してください。', target: activeCorners.left[3] },
+        { label: 'ホーム F (Home F)', desc: '左手ホームポジションの「F」キーを左手人差し指で押してください。', target: fTarget },
+        { label: 'ホーム J (Home J)', desc: '右手ホームポジションの「J」キーを右手人差し指で押してください。', target: jTarget }
       ];
     } else {
       return [
@@ -138,14 +174,21 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
         { label: '左半分・右上 (Left-Top-Right)', desc: '【左半分】の右上端にあるキー（例: 5 や T）を左手人差し指で押してください。', target: activeCorners.left[1] },
         { label: '左半分・右下 (Left-Bottom-Right)', desc: '【左半分】の右下端にあるキー（例: 左側Space や B）を左手人差し指で押してください。', target: activeCorners.left[2] },
         { label: '左半分・左下 (Left-Bottom-Left)', desc: '【左半分】の左下端にあるキー（例: 左下Ctrl や Shift）を左手人差し指で押してください。', target: activeCorners.left[3] },
+        { label: '左半分・ホーム F (Left-Home F)', desc: '【左半分】のホームポジション「F」キーを左手人差し指で押してください。', target: fTarget },
         // Right Half
         { label: '右半分・左上 (Right-Top-Left)', desc: '【右半分】の左上端にあるキー（例: 6 や Y）を右手人差し指で押してください。', target: activeCorners.right![0] },
         { label: '右半分・右上 (Right-Top-Right)', desc: '【右半分】の右上端にあるキー（例: Backspace や =）を右手人差し指で押してください。', target: activeCorners.right![1] },
         { label: '右半分・右下 (Right-Bottom-Right)', desc: '【右半分】の右下端にあるキー（例: 右下Ctrl や 矢印）を右手人差し指で押してください。', target: activeCorners.right![2] },
-        { label: '右半分・左下 (Right-Bottom-Left)', desc: '【右半分】の左下端にあるキー（例: 右側Space や N）を右手人差し指で押してください。', target: activeCorners.right![3] }
+        { label: '右半分・左下 (Right-Bottom-Left)', desc: '【右半分】の左下端にあるキー（例: 右側Space や N）を右手人差し指で押してください。', target: activeCorners.right![3] },
+        { label: '右半分・ホーム J (Right-Home J)', desc: '【右半分】のホームポジション「J」キーを右手人差し指で押してください。', target: jTarget }
       ];
     }
   }, [activeLayout, activeCorners]);
+
+  const alignPointsRef = useRef(alignPoints);
+  useEffect(() => {
+    alignPointsRef.current = alignPoints;
+  }, [alignPoints]);
 
   // MediaPipe Hand Landmark Render Loop
   useEffect(() => {
@@ -294,10 +337,10 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
             };
 
             if (computedHomography && typeof computedHomography === 'object' && 'isSplit' in computedHomography) {
-              drawQuad(alignPoints.slice(0, 4), 'rgba(0, 173, 181, 1)', activeCorners.left);
-              drawQuad(alignPoints.slice(4, 8), 'rgba(255, 0, 127, 1)', activeCorners.right!);
+              drawQuad(alignPointsRef.current.slice(0, 4), 'rgba(0, 173, 181, 1)', activeCorners.left);
+              drawQuad(alignPointsRef.current.slice(4, 8), 'rgba(255, 0, 127, 1)', activeCorners.right!);
             } else {
-              drawQuad(alignPoints, 'rgba(0, 255, 204, 1)', activeCorners.left);
+              drawQuad(alignPointsRef.current, 'rgba(0, 255, 204, 1)', activeCorners.left);
             }
             ctx.restore();
           }
@@ -321,7 +364,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
     if (!targetStep) return;
 
     // Determine appropriate hand finger tip
-    let pt = null;
+    let pt: Point | null;
     if (activeLayout.isSplit) {
       if (alignStepIndex < 4) {
         // Left half: Left hand preferred
@@ -345,7 +388,8 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
     if (alignStepIndex + 1 >= alignSteps.length) {
       // Complete alignment, calculate homography matrices
       if (!activeLayout.isSplit) {
-        const matrix = computeHomography(newPoints, activeCorners.left);
+        // Use first 4 points (corners) for homography
+        const matrix = computeHomography(newPoints.slice(0, 4), activeCorners.left);
         if (matrix) {
           setComputedHomography(matrix);
           setPhase('complete');
@@ -355,9 +399,9 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
           setAlignStepIndex(0);
         }
       } else {
-        // Split layouts: compute Left and Right independently
+        // Split layouts: compute Left (0-3) and Right (5-8) independently
         const leftPoints = newPoints.slice(0, 4);
-        const rightPoints = newPoints.slice(4, 8);
+        const rightPoints = newPoints.slice(5, 9);
         
         const leftMatrix = computeHomography(leftPoints, activeCorners.left);
         const rightMatrix = computeHomography(rightPoints, activeCorners.right!);
@@ -396,7 +440,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
         // Capture active finger coord
         // For Key A (left hand expected), check Left first.
         // For Key L (right hand expected), check Right first.
-        let pt = null;
+        let pt: Point | null;
         if (stepConfig.code === 'KeyA') {
           pt = latestLeftFingerRef.current || latestRightFingerRef.current;
         } else if (stepConfig.code === 'KeyL' || stepConfig.code === 'Enter') {
@@ -710,6 +754,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
                 )
           }
           pointers={previewPointers}
+          homePointers={homePointers}
         />
       </div>
       
