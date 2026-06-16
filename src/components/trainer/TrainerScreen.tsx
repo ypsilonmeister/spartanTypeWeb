@@ -1,16 +1,16 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { VirtualKeyboard } from '../common/VirtualKeyboard';
 import type { KeyboardLayout } from '../../types/kle';
-import type { HomographyMatrix } from '../../utils/homography';
 import { useWebcam } from '../../hooks/useWebcam';
 import { TypingEngine } from '../../utils/TypingEngine';
 import type { UnanalyzedSessionData } from '../../utils/TypingEngine';
 import { getFlatPracticeList } from '../../utils/plantDictionary';
 import '../../styles/cameraPreview.css';
+import type { CalibrationHomography } from '../../utils/calibrationStorage';
 
 interface TrainerScreenProps {
   layout: KeyboardLayout;
-  homography: HomographyMatrix | null;
+  homography: CalibrationHomography | null;
   onSessionComplete?: (data: UnanalyzedSessionData) => void;
 }
 

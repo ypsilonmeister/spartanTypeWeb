@@ -13,6 +13,8 @@ interface VirtualKeyboardProps {
   pointers?: { x: number, y: number }[];
   /** Currently pressed physical key code to highlight */
   activeKeyCode?: string | null;
+  /** Expected key label to highlight for calibration guidance */
+  targetKeyLabel?: string | null;
 }
 
 export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
@@ -21,6 +23,7 @@ export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
   gap = 4,
   pointers = [],
   activeKeyCode = null,
+  targetKeyLabel = null,
 }) => {
   const containerStyle: React.CSSProperties = useMemo(() => ({
     width: layout.width * unitSize,
@@ -36,6 +39,28 @@ export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
         const width = key.w * unitSize - gap;
         const height = key.h * unitSize - gap;
         const isActive = activeKeyCode ? matchKLEKey(key.label, activeKeyCode) : false;
+        
+        // Simple label matching (case-insensitive substring check)
+        const isTarget = targetKeyLabel
+          ? (key.label.toLowerCase().split('\n').some(part => part.trim() === targetKeyLabel.toLowerCase()) ||
+             (targetKeyLabel.toLowerCase() === 'space' && key.label === ''))
+          : false;
+
+        let bg = key.c || '#333333';
+        let tc = key.t || '#ffffff';
+        let glow = 'none';
+        let trans = 'none';
+
+        if (isActive) {
+          bg = '#00adb5';
+          tc = '#ffffff';
+          glow = '0 0 15px rgba(0, 173, 181, 0.8)';
+          trans = 'translateY(2px)';
+        } else if (isTarget) {
+          bg = '#ff007f'; // Bioluminescent pink for targets!
+          tc = '#ffffff';
+          glow = '0 0 20px rgba(255, 0, 127, 0.8)';
+        }
 
         return (
           <div
@@ -46,11 +71,11 @@ export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
               top: `${top + gap / 2}px`,
               width: `${width}px`,
               height: `${height}px`,
-              backgroundColor: isActive ? '#00adb5' : (key.c || '#333333'),
-              color: isActive ? '#ffffff' : (key.t || '#ffffff'),
-              boxShadow: isActive ? '0 0 15px rgba(0, 173, 181, 0.8)' : 'none',
-              transform: isActive ? 'translateY(2px)' : 'none',
-              transition: 'background-color 0.1s, transform 0.1s',
+              backgroundColor: bg,
+              color: tc,
+              boxShadow: glow,
+              transform: trans,
+              transition: 'background-color 0.2s, box-shadow 0.2s, transform 0.1s',
             }}
           >
             {key.label}

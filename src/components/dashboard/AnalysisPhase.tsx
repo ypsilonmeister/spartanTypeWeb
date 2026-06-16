@@ -79,6 +79,9 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
           } else {
              dummyEngine.processFrame([], timestamp, canvas.width, canvas.height);
           }
+        } else if (e.data.type === 'DETECT_ERROR') {
+          pendingFrames--;
+          console.error('Worker detection frame error:', e.data.error);
         }
       };
 
@@ -151,7 +154,19 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
         <div style={{ height: '100%', width: `${progress}%`, background: '#00adb5', transition: 'width 0.2s' }} />
       </div>
 
-      <video ref={videoRef} style={{ display: 'none' }} muted playsInline />
+      <video 
+        ref={videoRef} 
+        style={{ 
+          position: 'absolute', 
+          width: '1px', 
+          height: '1px', 
+          opacity: 0.01, 
+          pointerEvents: 'none', 
+          zIndex: -1 
+        }} 
+        muted 
+        playsInline 
+      />
       <canvas ref={canvasRef} style={{ display: 'none' }} />
     </div>
   );

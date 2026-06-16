@@ -1,43 +1,135 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useWebcam } from '../../hooks/useWebcam';
 import { HandTracker } from '../../utils/handTracker';
 import { DrawingUtils, HandLandmarker } from '@mediapipe/tasks-vision';
-import { useCalibration } from '../../hooks/useCalibration';
+import { parseKLE } from '../../utils/kleParser';
 import type { KeyboardLayout } from '../../types/kle';
 import { VirtualKeyboard } from '../common/VirtualKeyboard';
 import { computeHomography, applyHomography } from '../../utils/homography';
 import type { Point, HomographyMatrix } from '../../utils/homography';
+import { LAYOUT_PRESETS } from '../../assets/layoutTemplates';
+import type { LayoutPresetId } from '../../assets/layoutTemplates';
+import type { CalibrationHomography } from '../../utils/calibrationStorage';
 import '../../styles/cameraPreview.css';
 
 interface CalibrationScreenProps {
-  layout: KeyboardLayout;
-  onComplete: (homography: number[]) => void;
-  targetCorners: Point[]; // The 4 logical coordinates of the keyboard layout corners
+  onComplete: (presetId: string, homography: CalibrationHomography) => void;
 }
 
-export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ layout, onComplete, targetCorners }) => {
+type CalibrationPhase = 'detection' | 'detectionConfirm' | 'align' | 'complete';
+
+export function getLayoutCorners(layout: KeyboardLayout) {
+  if (!layout.isSplit) {
+    return {
+      left: [
+        { x: 0, y: 0 }, // Top-Left
+        { x: layout.width, y: 0 }, // Top-Right
+        { x: layout.width, y: layout.height }, // Bottom-Right
+        { x: 0, y: layout.height } // Bottom-Left
+      ]
+    };
+  }
+
+  const midX = layout.width / 2;
+  const leftKeys = layout.keys.filter(k => k.x + k.w / 2 < midX);
+  const rightKeys = layout.keys.filter(k => k.x + k.w / 2 >= midX);
+
+  const leftMaxX = Math.max(...leftKeys.map(k => k.x + k.w));
+  const rightMinX = Math.min(...rightKeys.map(k => k.x));
+
+  return {
+    left: [
+      { x: 0, y: 0 },
+      { x: leftMaxX, y: 0 },
+      { x: leftMaxX, y: layout.height },
+      { x: 0, y: layout.height }
+    ],
+    right: [
+      { x: rightMinX, y: 0 },
+      { x: layout.width, y: 0 },
+      { x: layout.width, y: layout.height },
+      { x: rightMinX, y: layout.height }
+    ]
+  };
+}
+
+export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { error } = useWebcam(videoRef);
   const [isReady, setIsReady] = useState(false);
   const [modelError, setModelError] = useState<string | null>(null);
-  const [previewPointer, setPreviewPointer] = useState<Point | null>(null);
+
+  // Calibration phases
+  const [phase, setPhase] = useState<CalibrationPhase>('detection');
   
-  const latestFingerPosRef = useRef<Point | null>(null);
-  const { step, recordPoint, homography, srcPoints, resetCalibration } = useCalibration(targetCorners);
+  // Layout presets selection
+  const [presetId, setPresetId] = useState<LayoutPresetId>('us-standard');
 
-  // Keep track of the inverse homography matrix to draw outline on camera preview
-  const invHomographyRef = useRef<HomographyMatrix | null>(null);
+  // Active layouts
+  const detectionLayout = useMemo(() => parseKLE(LAYOUT_PRESETS['us-standard'].data, false), []);
+  const activePreset = useMemo(() => LAYOUT_PRESETS[presetId as keyof typeof LAYOUT_PRESETS], [presetId]);
+  const activeLayout = useMemo(() => parseKLE(activePreset.data, activePreset.isSplit), [activePreset]);
 
-  // Compute inverse homography when calibration is complete
-  useEffect(() => {
-    if (step === 4 && homography && srcPoints.length === 4) {
-      invHomographyRef.current = computeHomography(targetCorners, srcPoints);
+  // Calibration tracking points
+  const [alignPoints, setAlignPoints] = useState<Point[]>([]);
+  const [alignStepIndex, setAlignStepIndex] = useState(0);
+
+  // Real-time tracking references
+  const latestLeftFingerRef = useRef<Point | null>(null);
+  const latestRightFingerRef = useRef<Point | null>(null);
+
+  // Mapped live pointers for complete preview
+  const [previewPointers, setPreviewPointers] = useState<Point[]>([]);
+
+  // Homography calculations
+  const [computedHomography, setComputedHomography] = useState<CalibrationHomography | null>(null);
+
+  // Step 1: Layout Auto-Detection config
+  const [detectionStep, setDetectionStep] = useState(0);
+  const DETECTION_KEYS = useMemo(() => [
+    { label: 'A', code: 'KeyA', key: 'a', desc: '物理キーボードの「A」キーを左手人差し指で1度叩いてください。' },
+    { label: 'L', code: 'KeyL', key: 'l', desc: '物理キーボードの「L」キーを右手人差し指で1度叩いてください。' },
+    { label: 'Space', code: 'Space', key: ' ', desc: '物理キーボードの「Space（スペース）」キーを1度叩いてください。' },
+    { 
+      label: '変換 or [', 
+      desc: '日本語配列の場合は「変換」キー（または無変換/かな）、英語配列の場合は「 [ 」キーを1度叩いてください。',
+      validate: (code: string, key: string) => 
+        ['Convert', 'NonConvert', 'HiraganaKatakana', 'BracketLeft'].includes(code) || 
+        ['変換', '無変換', 'かな', '['].includes(key)
+    },
+    { label: 'Enter', code: 'Enter', key: 'Enter', desc: '物理キーボードの「Enter」キーを右手で1度叩いてください。' }
+  ], []);
+
+  // Compute dynamic corners
+  const activeCorners = useMemo(() => getLayoutCorners(activeLayout), [activeLayout]);
+
+  // Expected calibration steps based on selected layout
+  const alignSteps = useMemo(() => {
+    if (!activeLayout.isSplit) {
+      return [
+        { label: 'Esc', desc: '【全体】「左上端」のキー（Esc または 1）を人差し指で押してください。', target: activeCorners.left[0] },
+        { label: 'Backspace', desc: '【全体】「右上端」のキー（Backspace または ￥）を人差し指で押してください。', target: activeCorners.left[1] },
+        { label: 'Enter', desc: '【全体】「右下端」のキー（右下Ctrl または 矢印）を人差し指で押してください。', target: activeCorners.left[2] },
+        { label: 'Ctrl', desc: '【全体】「左下端」のキー（左下Ctrl または Shift）を人差し指で押してください。', target: activeCorners.left[3] }
+      ];
     } else {
-      invHomographyRef.current = null;
+      return [
+        // Left Half
+        { label: 'Esc', desc: '【左半分】「左上端」のキー（Esc または 1）を左手人差し指で押してください。', target: activeCorners.left[0] },
+        { label: '5', desc: '【左半分】「右上端」のキー（5 または T）を左手人差し指で押してください。', target: activeCorners.left[1] },
+        { label: 'Space', desc: '【左半分】「右下端」のキー（左側Space または B）を左手人差し指で押してください。', target: activeCorners.left[2] },
+        { label: 'Ctrl', desc: '【左半分】「左下端」のキー（左下Ctrl または Shift）を左手人差し指で押してください。', target: activeCorners.left[3] },
+        // Right Half
+        { label: '6', desc: '【右半分】「左上端」のキー（6 または Y）を右手人差し指で押してください。', target: activeCorners.right![0] },
+        { label: 'Backspace', desc: '【右半分】「右上端」のキー（Backspace または =）を右手人差し指で押してください。', target: activeCorners.right![1] },
+        { label: 'Enter', desc: '【右半分】「右下端」のキー（右下Ctrl または 矢印）を右手人差し指で押してください。', target: activeCorners.right![2] },
+        { label: 'Space', desc: '【右半分】「左下端」のキー（右側Space または N）を右手人差し指で押してください。', target: activeCorners.right![3] }
+      ];
     }
-  }, [step, homography, srcPoints, targetCorners]);
+  }, [activeLayout, activeCorners]);
 
+  // MediaPipe Hand Landmark Render Loop
   useEffect(() => {
     let animationFrameId: number;
     let drawingUtils: DrawingUtils | null = null;
@@ -67,7 +159,6 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ layout, on
 
       const renderLoop = () => {
         if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-          // Fix MediaPipe IMAGE_DIMENSIONS warning by explicitly setting attributes
           if (video.width !== video.videoWidth) video.width = video.videoWidth;
           if (video.height !== video.videoHeight) video.height = video.videoHeight;
 
@@ -86,74 +177,111 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ layout, on
             const results = HandTracker.getInstance().detectForVideo(video, performance.now());
             lastVideoTime = video.currentTime;
 
-            latestFingerPosRef.current = null; // Reset if no hand is found
+            latestLeftFingerRef.current = null;
+            latestRightFingerRef.current = null;
+            const mappedPointersList: Point[] = [];
 
             if (results && results.landmarks && results.landmarks.length > 0) {
-              const landmarks = results.landmarks[0];
-              
-              drawingUtils?.drawConnectors(landmarks, HandLandmarker.HAND_CONNECTIONS, {
-                color: '#00FF00',
-                lineWidth: 2,
-              });
-              drawingUtils?.drawLandmarks(landmarks, {
-                color: '#FF0000',
-                lineWidth: 1,
-                radius: 2,
-              });
+              for (let i = 0; i < results.landmarks.length; i++) {
+                const landmarks = results.landmarks[i];
+                const catName = results.handednesses?.[i]?.[0]?.categoryName;
+                const handedness: 'Left' | 'Right' = (catName === 'Left' || catName === 'Right')
+                  ? catName
+                  : (landmarks[0].x < 0.5 ? 'Right' : 'Left');
+                
+                // Draw hand skeleton with cyber glow styles
+                drawingUtils?.drawConnectors(landmarks, HandLandmarker.HAND_CONNECTIONS, {
+                  color: handedness === 'Left' ? '#00adb5' : '#ff007f',
+                  lineWidth: 2,
+                });
+                drawingUtils?.drawLandmarks(landmarks, {
+                  color: '#ffffff',
+                  lineWidth: 1,
+                  radius: 2,
+                });
 
-              const indexTip = landmarks[8];
-              if (indexTip) {
-                const screenPt = {
-                  x: (1 - indexTip.x) * canvas.width,
-                  y: indexTip.y * canvas.height
-                };
-                latestFingerPosRef.current = screenPt;
+                const indexTip = landmarks[8];
+                if (indexTip) {
+                  const screenPt = {
+                    x: (1 - indexTip.x) * canvas.width,
+                    y: indexTip.y * canvas.height
+                  };
 
-                // Draw a strong highlight on the index finger tip in the mirrored context
-                ctx.beginPath();
-                ctx.arc(indexTip.x * canvas.width, indexTip.y * canvas.height, 10, 0, 2 * Math.PI);
-                ctx.fillStyle = '#00FFFF';
-                ctx.fill();
-                ctx.strokeStyle = '#FFFFFF';
-                ctx.lineWidth = 2;
-                ctx.stroke();
+                  if (handedness === 'Left') {
+                    latestLeftFingerRef.current = screenPt;
+                  } else {
+                    latestRightFingerRef.current = screenPt;
+                  }
 
-                // If calibration is complete, map pointer for live preview
-                if (homography) {
-                  const mapped = applyHomography(homography, screenPt);
-                  setPreviewPointer(mapped);
+                  // Glow highlight on index finger tip
+                  ctx.beginPath();
+                  ctx.arc(indexTip.x * canvas.width, indexTip.y * canvas.height, 10, 0, 2 * Math.PI);
+                  ctx.fillStyle = handedness === 'Left' ? '#00adb5' : '#ff007f';
+                  ctx.fill();
+                  ctx.strokeStyle = '#ffffff';
+                  ctx.lineWidth = 2;
+                  ctx.stroke();
+
+                  // Live pointer preview mapping
+                  if (phase === 'complete' && computedHomography) {
+                    let mapped: Point;
+                    if (computedHomography && typeof computedHomography === 'object' && 'isSplit' in computedHomography) {
+                      const matrix = handedness === 'Left' ? computedHomography.left : computedHomography.right;
+                      mapped = applyHomography(matrix, screenPt);
+                    } else {
+                      mapped = applyHomography(computedHomography as HomographyMatrix, screenPt);
+                    }
+                    mappedPointersList.push(mapped);
+                  }
                 }
               }
-            } else {
-              setPreviewPointer(null);
             }
+            
+            setPreviewPointers(mappedPointersList);
           }
           ctx.restore();
 
-          // Draw the physical keyboard overlay if we have inverse homography
-          if (invHomographyRef.current) {
-            const tl = applyHomography(invHomographyRef.current, { x: 0, y: 0 });
-            const tr = applyHomography(invHomographyRef.current, { x: targetCorners[1].x, y: targetCorners[1].y });
-            const br = applyHomography(invHomographyRef.current, { x: targetCorners[2].x, y: targetCorners[2].y });
-            const bl = applyHomography(invHomographyRef.current, { x: targetCorners[3].x, y: targetCorners[3].y });
+          // Draw neon overlays in 'complete' phase
+          if (phase === 'complete' && computedHomography) {
+            ctx.save();
+            const drawQuad = (physicalPoints: Point[], color: string, cornersList: Point[]) => {
+              try {
+                const invMatrix = computeHomography(cornersList, physicalPoints);
+                if (invMatrix) {
+                  const tl = applyHomography(invMatrix, { x: 0, y: 0 });
+                  const tr = applyHomography(invMatrix, { x: cornersList[1].x, y: cornersList[1].y });
+                  const br = applyHomography(invMatrix, { x: cornersList[2].x, y: cornersList[2].y });
+                  const bl = applyHomography(invMatrix, { x: cornersList[3].x, y: cornersList[3].y });
 
-            ctx.beginPath();
-            ctx.moveTo(tl.x, tl.y);
-            ctx.lineTo(tr.x, tr.y);
-            ctx.lineTo(br.x, br.y);
-            ctx.lineTo(bl.x, bl.y);
-            ctx.closePath();
+                  ctx.beginPath();
+                  ctx.moveTo(tl.x, tl.y);
+                  ctx.lineTo(tr.x, tr.y);
+                  ctx.lineTo(br.x, br.y);
+                  ctx.lineTo(bl.x, bl.y);
+                  ctx.closePath();
 
-            ctx.strokeStyle = '#00ffcc';
-            ctx.lineWidth = 3;
-            ctx.shadowBlur = 15;
-            ctx.shadowColor = '#00ffcc';
-            ctx.stroke();
-            ctx.shadowBlur = 0; // reset
-            
-            // Draw translucent overlay
-            ctx.fillStyle = 'rgba(0, 255, 204, 0.15)';
-            ctx.fill();
+                  ctx.strokeStyle = color;
+                  ctx.lineWidth = 3;
+                  ctx.shadowBlur = 15;
+                  ctx.shadowColor = color;
+                  ctx.stroke();
+                  ctx.shadowBlur = 0;
+
+                  ctx.fillStyle = color.replace(')', ', 0.15)').replace('rgb', 'rgba');
+                  ctx.fill();
+                }
+              } catch (e) {
+                console.error("Failed to project debug overlay", e);
+              }
+            };
+
+            if (computedHomography && typeof computedHomography === 'object' && 'isSplit' in computedHomography) {
+              drawQuad(alignPoints.slice(0, 4), 'rgba(0, 173, 181, 1)', activeCorners.left);
+              drawQuad(alignPoints.slice(4, 8), 'rgba(255, 0, 127, 1)', activeCorners.right!);
+            } else {
+              drawQuad(alignPoints, 'rgba(0, 255, 204, 1)', activeCorners.left);
+            }
+            ctx.restore();
           }
         }
         animationFrameId = requestAnimationFrame(renderLoop);
@@ -167,163 +295,366 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ layout, on
       isMounted = false;
       if (animationFrameId) cancelAnimationFrame(animationFrameId);
     };
-  }, [homography, step, targetCorners]);
+  }, [phase, computedHomography, activeCorners, activeLayout.isSplit]);
 
-  const handleConfirm = useCallback(() => {
-    if (latestFingerPosRef.current) {
-      const { x, y } = latestFingerPosRef.current;
-      
-      // Prevent registering duplicate/extremely close points (e.g. background noise or accidental double click)
-      if (srcPoints.length > 0) {
-        const lastPt = srcPoints[srcPoints.length - 1];
-        const dist = Math.hypot(x - lastPt.x, y - lastPt.y);
-        if (dist < 30) {
-          alert("前回記録した位置と近すぎます。正しい角に指を動かし、カメラプレビューの「青い円」が指先に追従していることを確認してください。");
+  // Key event listeners for calibrating & detecting
+  const handlePhysicalKeyPress = useCallback((e: KeyboardEvent) => {
+    if (!isReady) return;
+
+    if (phase === 'detection') {
+      const stepConfig = DETECTION_KEYS[detectionStep];
+      if (!stepConfig) return;
+
+      const isValid = stepConfig.validate 
+        ? stepConfig.validate(e.code, e.key)
+        : (e.code === stepConfig.code || e.key.toLowerCase() === stepConfig.key);
+
+      if (isValid) {
+        // Capture active finger coord
+        // For Key A (left hand expected), check Left first.
+        // For Key L (right hand expected), check Right first.
+        let pt = null;
+        if (stepConfig.code === 'KeyA') {
+          pt = latestLeftFingerRef.current || latestRightFingerRef.current;
+        } else if (stepConfig.code === 'KeyL' || stepConfig.code === 'Enter') {
+          pt = latestRightFingerRef.current || latestLeftFingerRef.current;
+        } else {
+          pt = latestLeftFingerRef.current || latestRightFingerRef.current;
+        }
+
+        if (!pt) {
+          alert("指先（ランドマーク）がカメラで検知されていません。手をカメラに映してください。");
           return;
         }
-      }
 
-      recordPoint(x, y);
-    } else {
-      alert("指先が検出されていません。カメラに手をかざしてください。");
-    }
-  }, [recordPoint, srcPoints]);
-
-  // Allow pressing Space to confirm
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && step < 4 && isReady) {
         e.preventDefault();
-        handleConfirm();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleConfirm, step, isReady]);
+        
+        // Save JIS vs US heuristics on step 3
+        if (detectionStep === 3) {
+          const isJisKey = ['Convert', 'NonConvert', 'HiraganaKatakana'].includes(e.code) || 
+                            ['変換', '無変換', 'かな'].includes(e.key);
+          setPresetId(isJisKey ? 'jis-standard' : 'us-standard');
+        }
 
-  const corners = ['左上 (Top-Left)', '右上 (Top-Right)', '右下 (Bottom-Right)', '左下 (Bottom-Left)'];
-  const currentInstruction = step < 4 
-    ? `キーボードの「${corners[step]}」の角を人差し指で指し、固定した状態でボタン（またはSpaceキー）を押してください。`
-    : 'キャリブレーション完了！';
+        if (detectionStep + 1 >= DETECTION_KEYS.length) {
+          setPhase('detectionConfirm');
+        } else {
+          setDetectionStep(prev => prev + 1);
+        }
+      }
+    } else if (phase === 'align') {
+      const targetStep = alignSteps[alignStepIndex];
+      if (!targetStep) return;
+
+      // Determine appropriate hand finger tip
+      let pt = null;
+      if (activeLayout.isSplit) {
+        if (alignStepIndex < 4) {
+          // Left half: Left hand preferred
+          pt = latestLeftFingerRef.current || latestRightFingerRef.current;
+        } else {
+          // Right half: Right hand preferred
+          pt = latestRightFingerRef.current || latestLeftFingerRef.current;
+        }
+      } else {
+        pt = latestLeftFingerRef.current || latestRightFingerRef.current;
+      }
+
+      if (!pt) {
+        alert("指先が検知されていません。キーの上に指を置いて押してください。");
+        return;
+      }
+
+      e.preventDefault();
+      const newPoints = [...alignPoints, pt];
+      setAlignPoints(newPoints);
+
+      if (alignStepIndex + 1 >= alignSteps.length) {
+        // Complete alignment, calculate homography matrices
+        if (!activeLayout.isSplit) {
+          const matrix = computeHomography(newPoints, activeCorners.left);
+          if (matrix) {
+            setComputedHomography(matrix);
+            setPhase('complete');
+          } else {
+            alert("ホモグラフィ計算に失敗しました。点配置に問題があります。やり直してください。");
+            setAlignPoints([]);
+            setAlignStepIndex(0);
+          }
+        } else {
+          // Split layouts: compute Left and Right independently
+          const leftPoints = newPoints.slice(0, 4);
+          const rightPoints = newPoints.slice(4, 8);
+          
+          const leftMatrix = computeHomography(leftPoints, activeCorners.left);
+          const rightMatrix = computeHomography(rightPoints, activeCorners.right!);
+
+          if (leftMatrix && rightMatrix) {
+            setComputedHomography({
+              left: leftMatrix,
+              right: rightMatrix,
+              isSplit: true
+            });
+            setPhase('complete');
+          } else {
+            alert("左右どちらかのホモグラフィ計算に失敗しました。点配置に問題があります。やり直してください。");
+            setAlignPoints([]);
+            setAlignStepIndex(0);
+          }
+        }
+      } else {
+        setAlignStepIndex(prev => prev + 1);
+      }
+    } else if (phase === 'detectionConfirm') {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        setPhase('align');
+        setAlignStepIndex(0);
+        setAlignPoints([]);
+      }
+    }
+  }, [phase, isReady, detectionStep, alignStepIndex, alignPoints, DETECTION_KEYS, alignSteps, activeLayout, activeCorners]);
+
+  useEffect(() => {
+    window.addEventListener('keydown', handlePhysicalKeyPress);
+    return () => window.removeEventListener('keydown', handlePhysicalKeyPress);
+  }, [handlePhysicalKeyPress]);
+
+  const handleReset = () => {
+    setPhase('detection');
+    setDetectionStep(0);
+    setAlignPoints([]);
+    setAlignStepIndex(0);
+    setComputedHomography(null);
+  };
+
+  const handleLayoutPresetToggle = (preset: LayoutPresetId) => {
+    setPresetId(preset);
+  };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem', width: '100%', maxWidth: '800px', margin: '0 auto' }}>
-      <div className="camera-preview-container">
-        {(error || modelError) && <div className="error-message">{error || modelError}</div>}
-        {!isReady && !error && !modelError && <div className="loading-message">Initializing AI Models...</div>}
-        <video ref={videoRef} autoPlay playsInline muted style={{ display: 'none' }} />
-        <canvas ref={canvasRef} className="camera-canvas" />
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem', width: '100%', maxWidth: '900px', margin: '0 auto' }}>
       
-      <div style={{ 
-        background: 'rgba(255,255,255,0.05)', 
-        border: '1px solid rgba(255,255,255,0.1)',
-        backdropFilter: 'blur(10px)',
-        padding: '1.5rem', 
-        borderRadius: '16px', 
-        width: '100%', 
-        textAlign: 'center',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.3)'
-      }}>
-        {step < 4 ? (
-          <>
-            <h2 style={{ margin: '0 0 1rem 0', fontSize: '1.4rem', fontWeight: 500, letterSpacing: '1px' }}>
-              キャリブレーション (Step {step + 1}/4)
-            </h2>
-            <p style={{ margin: '0 0 1.5rem 0', color: '#aaa', fontSize: '1.1rem', lineHeight: 1.5 }}>
-              {currentInstruction}
-            </p>
-            
-            {/* Debug srcPoints */}
-            {srcPoints.length > 0 && (
-              <div style={{ marginBottom: '1.5rem', fontSize: '0.9rem', color: '#00adb5', display: 'flex', justifyContent: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-                {srcPoints.map((pt, i) => (
-                  <span key={i} style={{ background: 'rgba(0,173,181,0.1)', padding: '0.25rem 0.6rem', borderRadius: '4px', border: '1px solid rgba(0,173,181,0.2)' }}>
-                    角 {i + 1}: ({Math.round(pt.x)}, {Math.round(pt.y)})
+      {/* Visual Feedback Columns */}
+      <div style={{ display: 'flex', gap: '1.5rem', width: '100%', flexWrap: 'wrap', justifyContent: 'center' }}>
+        
+        {/* Left: Camera stream */}
+        <div style={{ flex: '1 1 480px', maxWidth: '640px' }}>
+          <div className="camera-preview-container" style={{ border: '2px solid rgba(255, 255, 255, 0.1)' }}>
+            {(error || modelError) && <div className="error-message">{error || modelError}</div>}
+            {!isReady && !error && !modelError && <div className="loading-message">Initializing Hand Tracker AI...</div>}
+            <video ref={videoRef} autoPlay playsInline muted style={{ display: 'none' }} />
+            <canvas ref={canvasRef} className="camera-canvas" />
+          </div>
+        </div>
+
+        {/* Right: Interaction Card */}
+        <div style={{
+          flex: '1 1 320px',
+          background: 'rgba(255, 255, 255, 0.03)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          backdropFilter: 'blur(16px)',
+          borderRadius: '16px',
+          padding: '1.5rem',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          minHeight: '270px',
+          boxSizing: 'border-box'
+        }}>
+          {phase === 'detection' && (
+            <div>
+              <div style={{ textTransform: 'uppercase', fontSize: '0.8rem', color: '#00adb5', fontWeight: 600, letterSpacing: '1px', marginBottom: '0.5rem' }}>
+                Step 1: 配列の自動判定 ({detectionStep + 1} / 5)
+              </div>
+              <h2 style={{ fontSize: '1.4rem', margin: '0 0 1rem 0', fontWeight: 400 }}>キーボードの認識</h2>
+              <p style={{ color: '#ccc', lineHeight: '1.6', fontSize: '1.05rem', margin: 0 }}>
+                {DETECTION_KEYS[detectionStep]?.desc}
+              </p>
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem', flexWrap: 'wrap' }}>
+                {DETECTION_KEYS.map((key, i) => (
+                  <span 
+                    key={i} 
+                    style={{ 
+                      padding: '0.4rem 0.8rem', 
+                      borderRadius: '8px', 
+                      background: i === detectionStep ? '#00adb5' : (i < detectionStep ? 'rgba(0, 173, 181, 0.2)' : 'rgba(255,255,255,0.05)'),
+                      border: '1px solid',
+                      borderColor: i === detectionStep ? '#00adb5' : 'rgba(255, 255, 255, 0.1)',
+                      fontSize: '0.9rem',
+                      color: i <= detectionStep ? '#fff' : '#666',
+                      fontWeight: i === detectionStep ? 'bold' : 'normal'
+                    }}
+                  >
+                    {key.label}
                   </span>
                 ))}
               </div>
-            )}
+            </div>
+          )}
 
-            <button 
-              onClick={handleConfirm}
-              disabled={!isReady}
-              style={{
-                background: 'linear-gradient(135deg, #00adb5, #007a82)',
-                color: '#fff',
-                border: 'none',
-                padding: '1rem 3rem',
-                fontSize: '1.2rem',
-                borderRadius: '50px',
-                cursor: !isReady ? 'not-allowed' : 'pointer',
-                fontWeight: 'bold',
-                boxShadow: '0 4px 12px rgba(0, 173, 181, 0.4)',
-                transition: 'transform 0.1s, box-shadow 0.1s'
-              }}
-            >
-              ここを記録 (Space)
-            </button>
-          </>
-        ) : (
-          <>
-            <h2 style={{ margin: '0 0 0.5rem 0', fontSize: '1.4rem', fontWeight: 500, letterSpacing: '1px', color: '#00ffcc' }}>
-              ✓ キャリブレーションが完了しました
-            </h2>
-            <p style={{ margin: '0 0 1.5rem 0', color: '#ccc', fontSize: '1.0rem', lineHeight: 1.5 }}>
-              カメラ映像の上に水色のキーボード枠線が表示されています。カメラの前で指を動かしたとき、<br />
-              下の仮想キーボード上の正しいキー位置に<b>水色のポインター</b>が追従することを確認してください。
-            </p>
-            
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+          {phase === 'detectionConfirm' && (
+            <div>
+              <div style={{ textTransform: 'uppercase', fontSize: '0.8rem', color: '#00adb5', fontWeight: 600, letterSpacing: '1px', marginBottom: '0.5rem' }}>
+                Step 1: 自動判定完了
+              </div>
+              <h2 style={{ fontSize: '1.4rem', margin: '0 0 1rem 0', fontWeight: 400 }}>配列の確認・選択</h2>
+              <p style={{ color: '#aaa', fontSize: '0.95rem', margin: '0 0 1.5rem 0' }}>
+                検出された配列を基に設定しました。お使いのキーボードに合わせて変更も可能です。
+              </p>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem', marginBottom: '1.5rem' }}>
+                {(Object.keys(LAYOUT_PRESETS) as LayoutPresetId[]).map((presetKey) => (
+                  <button
+                    key={presetKey}
+                    onClick={() => handleLayoutPresetToggle(presetKey)}
+                    style={{
+                      padding: '0.8rem 0.5rem',
+                      background: presetId === presetKey ? 'rgba(0, 173, 181, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                      border: '1px solid',
+                      borderColor: presetId === presetKey ? '#00adb5' : 'rgba(255, 255, 255, 0.1)',
+                      color: presetId === presetKey ? '#00adb5' : '#aaa',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '0.9rem',
+                      fontWeight: presetId === presetKey ? 'bold' : 'normal',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    {LAYOUT_PRESETS[presetKey as keyof typeof LAYOUT_PRESETS].name}
+                  </button>
+                ))}
+              </div>
+
               <button 
-                onClick={() => {
-                  if (homography) {
-                    onComplete(homography);
-                  }
-                }}
+                onClick={() => handlePhysicalKeyPress({ key: 'Enter', preventDefault: () => {} } as KeyboardEvent)}
                 style={{
-                  background: 'linear-gradient(135deg, #00ffcc, #00b38f)',
-                  color: '#111',
+                  width: '100%',
+                  background: 'linear-gradient(135deg, #00adb5, #007a82)',
                   border: 'none',
-                  padding: '1rem 2.5rem',
-                  fontSize: '1.1rem',
-                  borderRadius: '50px',
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                  boxShadow: '0 4px 12px rgba(0, 255, 204, 0.4)',
-                }}
-              >
-                この設定で決定して練習へ進む
-              </button>
-              <button 
-                onClick={resetCalibration}
-                style={{
-                  background: 'rgba(255,255,255,0.05)',
                   color: '#fff',
-                  border: '1px solid rgba(255,255,255,0.2)',
-                  padding: '1rem 2.5rem',
-                  fontSize: '1.1rem',
+                  padding: '1rem',
                   borderRadius: '50px',
-                  cursor: 'pointer',
                   fontWeight: 'bold',
-                  transition: 'background 0.2s'
+                  fontSize: '1.05rem',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 15px rgba(0, 173, 181, 0.4)'
                 }}
               >
-                やり直す (Reset)
+                この配列で決定して四隅調整へ (Enter)
               </button>
             </div>
-            
-            <div style={{ position: 'relative', background: 'rgba(0,0,0,0.3)', padding: '1rem', borderRadius: '12px', display: 'inline-block' }}>
-              <VirtualKeyboard 
-                layout={layout}
-                unitSize={40}
-                gap={5}
-                pointers={previewPointer ? [previewPointer] : []}
-              />
+          )}
+
+          {phase === 'align' && (
+            <div>
+              <div style={{ textTransform: 'uppercase', fontSize: '0.8rem', color: '#ff007f', fontWeight: 600, letterSpacing: '1px', marginBottom: '0.5rem' }}>
+                Step 2: 四隅の調整 ({alignStepIndex + 1} / {alignSteps.length})
+              </div>
+              <h2 style={{ fontSize: '1.4rem', margin: '0 0 1rem 0', fontWeight: 400 }}>キーボードの角をタップ</h2>
+              <p style={{ color: '#ccc', lineHeight: '1.6', fontSize: '1.05rem', margin: 0 }}>
+                {alignSteps[alignStepIndex]?.desc}
+              </p>
+              <div style={{ marginTop: '1.5rem', fontSize: '0.85rem', color: '#ff007f', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                {alignSteps.map((step, i) => (
+                  <span 
+                    key={i} 
+                    style={{ 
+                      padding: '0.3rem 0.6rem', 
+                      borderRadius: '4px',
+                      background: i === alignStepIndex ? 'rgba(255, 0, 127, 0.15)' : (i < alignStepIndex ? 'rgba(255, 0, 127, 0.05)' : 'transparent'),
+                      border: '1px solid',
+                      borderColor: i === alignStepIndex ? '#ff007f' : 'rgba(255, 255, 255, 0.05)',
+                      color: i <= alignStepIndex ? '#fff' : '#444'
+                    }}
+                  >
+                    {step.label}
+                  </span>
+                ))}
+              </div>
             </div>
-          </>
-        )}
+          )}
+
+          {phase === 'complete' && (
+            <div>
+              <div style={{ textTransform: 'uppercase', fontSize: '0.8rem', color: '#00ffcc', fontWeight: 600, letterSpacing: '1px', marginBottom: '0.5rem' }}>
+                キャリブレーション完了
+              </div>
+              <h2 style={{ fontSize: '1.4rem', margin: '0 0 1rem 0', fontWeight: 400, color: '#00ffcc' }}>調整完了！</h2>
+              <p style={{ color: '#aaa', fontSize: '0.95rem', lineHeight: '1.5', margin: '0 0 1.5rem 0' }}>
+                カメラに緑・ピンクのガイド枠が表示されました。
+                キーを押したとき、下の仮想キーボードにポインター（水色の円）が正しく追従するかテストしてください。
+              </p>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                <button 
+                  onClick={() => {
+                    if (computedHomography) {
+                      onComplete(presetId, computedHomography);
+                    }
+                  }}
+                  style={{
+                    background: 'linear-gradient(135deg, #00ffcc, #00b38f)',
+                    color: '#111',
+                    border: 'none',
+                    padding: '1rem',
+                    fontSize: '1.05rem',
+                    borderRadius: '50px',
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                    boxShadow: '0 4px 15px rgba(0, 255, 204, 0.4)',
+                  }}
+                >
+                  この設定で練習を開始する
+                </button>
+                <button 
+                  onClick={handleReset}
+                  style={{
+                    background: 'rgba(255,255,255,0.05)',
+                    color: '#fff',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    padding: '1rem',
+                    fontSize: '1.05rem',
+                    borderRadius: '50px',
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                    transition: 'background 0.2s'
+                  }}
+                >
+                  やり直す (Reset)
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
       </div>
+
+      {/* Bottom: Virtual Keyboard for Visual Guidance */}
+      <div style={{
+        position: 'relative',
+        background: 'rgba(0, 0, 0, 0.4)',
+        border: '1px solid rgba(255, 255, 255, 0.05)',
+        padding: '1.5rem',
+        borderRadius: '16px',
+        display: 'inline-block',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+        marginTop: '0.5rem'
+      }}>
+        <VirtualKeyboard 
+          layout={phase === 'detection' ? detectionLayout : activeLayout}
+          unitSize={38}
+          gap={5}
+          targetKeyLabel={
+            phase === 'detection' 
+              ? DETECTION_KEYS[detectionStep]?.label 
+              : (phase === 'align' ? alignSteps[alignStepIndex]?.label : null)
+          }
+          pointers={previewPointers}
+        />
+      </div>
+      
     </div>
   );
 };

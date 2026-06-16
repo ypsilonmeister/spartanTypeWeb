@@ -1,33 +1,30 @@
 import { useMemo, useState } from 'react';
 import { parseKLE } from './utils/kleParser';
-import { sampleLayoutData } from './assets/sampleLayout';
 import { TrainerScreen } from './components/trainer/TrainerScreen';
 import { CalibrationScreen } from './components/calibration/CalibrationScreen';
 import { DashboardScreen } from './components/dashboard/DashboardScreen';
 import type { UnanalyzedSessionData } from './utils/TypingEngine';
-import type { HomographyMatrix, Point } from './utils/homography';
-import { saveHomography, loadHomography } from './utils/calibrationStorage';
+import { loadCalibration, saveCalibration } from './utils/calibrationStorage';
+import type { CalibrationHomography } from './utils/calibrationStorage';
+import { LAYOUT_PRESETS } from './assets/layoutTemplates';
+import type { LayoutPresetId } from './assets/layoutTemplates';
 
 function App() {
-  const layout = useMemo(() => parseKLE(sampleLayoutData), []);
-  const savedHomography = useMemo(() => loadHomography(), []);
-  const [mode, setMode] = useState<'calibration' | 'trainer' | 'dashboard'>(savedHomography ? 'trainer' : 'calibration');
-  const [homography, setHomography] = useState<HomographyMatrix | null>(savedHomography);
+  const savedConfig = useMemo(() => loadCalibration(), []);
+  const [layoutPresetId, setLayoutPresetId] = useState<LayoutPresetId>(savedConfig ? savedConfig.layoutPresetId as LayoutPresetId : 'us-standard');
+  const [homography, setHomography] = useState<CalibrationHomography | null>(savedConfig ? savedConfig.homography : null);
+  const [mode, setMode] = useState<'calibration' | 'trainer' | 'dashboard'>(savedConfig ? 'trainer' : 'calibration');
   const [unanalyzedData, setUnanalyzedData] = useState<UnanalyzedSessionData | null>(null);
 
-  // Define 4 logical corners based on layout bounding box
-  const targetCorners = useMemo<Point[]>(() => {
-    return [
-      { x: 0, y: 0 }, // Top-Left
-      { x: layout.width, y: 0 }, // Top-Right
-      { x: layout.width, y: layout.height }, // Bottom-Right
-      { x: 0, y: layout.height } // Bottom-Left
-    ];
-  }, [layout]);
+  const layout = useMemo(() => {
+    const preset = LAYOUT_PRESETS[layoutPresetId as keyof typeof LAYOUT_PRESETS];
+    return parseKLE(preset.data, preset.isSplit);
+  }, [layoutPresetId]);
 
-  const handleCalibrationComplete = (matrix: HomographyMatrix) => {
-    saveHomography(matrix);
-    setHomography(matrix);
+  const handleCalibrationComplete = (presetId: string, calibration: CalibrationHomography) => {
+    saveCalibration({ layoutPresetId: presetId, homography: calibration });
+    setLayoutPresetId(presetId as LayoutPresetId);
+    setHomography(calibration);
     setMode('trainer');
   };
 
@@ -103,8 +100,6 @@ function App() {
       
       {mode === 'calibration' && (
         <CalibrationScreen 
-          layout={layout}
-          targetCorners={targetCorners} 
           onComplete={handleCalibrationComplete} 
         />
       )}

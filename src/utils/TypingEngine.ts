@@ -2,6 +2,7 @@ import { applyHomography } from './homography';
 import type { HomographyMatrix, Point } from './homography';
 import type { KeyboardLayout, Key } from '../types/kle';
 import { matchKLEKey, expectedFingerMap } from './keyMap';
+import type { CalibrationHomography } from './calibrationStorage';
 
 export interface HandData {
   landmarks: { x: number, y: number, z: number }[];
@@ -24,7 +25,7 @@ export interface KeystrokeLog {
 }
 
 export interface SessionData {
-  homography: HomographyMatrix;
+  homography: CalibrationHomography;
   frames: FrameLog[];
   keystrokes: KeystrokeLog[];
 }
@@ -32,7 +33,7 @@ export interface SessionData {
 export interface UnanalyzedSessionData {
   blob: Blob | null;
   keystrokes: KeystrokeLog[];
-  homography: HomographyMatrix;
+  homography: CalibrationHomography;
 }
 
 const FINGERS = [
@@ -45,7 +46,7 @@ const FINGERS = [
 
 export class TypingEngine {
   private layout: KeyboardLayout;
-  private homography: HomographyMatrix;
+  private homography: CalibrationHomography;
   private onKeyPressCallback?: (code: string) => void;
   
   private frames: FrameLog[] = [];
@@ -68,7 +69,7 @@ export class TypingEngine {
     });
   };
 
-  constructor(layout: KeyboardLayout, homography: HomographyMatrix, onKeyPressCallback?: (code: string) => void) {
+  constructor(layout: KeyboardLayout, homography: CalibrationHomography, onKeyPressCallback?: (code: string) => void) {
     this.layout = layout;
     this.homography = homography;
     this.onKeyPressCallback = onKeyPressCallback;
@@ -208,17 +209,24 @@ export class TypingEngine {
 
     if (hands && hands.length > 0) {
       for (const hand of hands) {
+        let activeHomography: HomographyMatrix;
+        if (this.homography && typeof this.homography === 'object' && 'isSplit' in this.homography) {
+          activeHomography = hand.handedness === 'Left' ? this.homography.left : this.homography.right;
+        } else {
+          activeHomography = this.homography as HomographyMatrix;
+        }
+
         const indexTip = hand.landmarks[8];
         if (indexTip) {
           const screenPt = { x: (1 - indexTip.x) * canvasWidth, y: indexTip.y * canvasHeight };
-          uiPointers.push(applyHomography(this.homography, screenPt));
+          uiPointers.push(applyHomography(activeHomography, screenPt));
         }
 
         for (const finger of FINGERS) {
           const tip = hand.landmarks[finger.index];
           if (tip) {
             const pt = { x: (1 - tip.x) * canvasWidth, y: tip.y * canvasHeight };
-            mappedTips[`${hand.handedness}${finger.name}`] = applyHomography(this.homography, pt);
+            mappedTips[`${hand.handedness}${finger.name}`] = applyHomography(activeHomography, pt);
           }
         }
       }

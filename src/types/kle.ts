@@ -21,4 +21,6 @@ export interface KeyboardLayout {
   width: number;
   /** Overall height of the keyboard layout in U */
   height: number;
+  /** Whether the layout is split */
+  isSplit?: boolean;
 }

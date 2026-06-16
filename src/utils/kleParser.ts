@@ -7,7 +7,7 @@ import type { Key, KeyboardLayout } from '../types/kle';
  * @param jsonData Parsed JSON array of arrays from KLE
  * @returns KeyboardLayout object containing keys and total dimensions
  */
-export function parseKLE(jsonData: unknown[]): KeyboardLayout {
+export function parseKLE(jsonData: unknown[], isSplit?: boolean): KeyboardLayout {
   const keys: Key[] = [];
   let currentY = 0;
 
@@ -69,5 +69,6 @@ export function parseKLE(jsonData: unknown[]): KeyboardLayout {
     keys,
     width: maxWidth,
     height: maxHeight,
+    isSplit,
   };
 }
