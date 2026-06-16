@@ -315,6 +315,71 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
     };
   }, [phase, computedHomography, activeCorners, activeLayout.isSplit]);
 
+  // Record the point for the current step in the align phase
+  const recordCurrentAlignPoint = useCallback(() => {
+    const targetStep = alignSteps[alignStepIndex];
+    if (!targetStep) return;
+
+    // Determine appropriate hand finger tip
+    let pt = null;
+    if (activeLayout.isSplit) {
+      if (alignStepIndex < 4) {
+        // Left half: Left hand preferred
+        pt = latestLeftFingerRef.current || latestRightFingerRef.current;
+      } else {
+        // Right half: Right hand preferred
+        pt = latestRightFingerRef.current || latestLeftFingerRef.current;
+      }
+    } else {
+      pt = latestLeftFingerRef.current || latestRightFingerRef.current;
+    }
+
+    if (!pt) {
+      alert("指先が検知されていません。キーの上に指を置いて押すか、指先がカメラに見える状態で画面のボタンをクリックしてください。");
+      return;
+    }
+
+    const newPoints = [...alignPoints, pt];
+    setAlignPoints(newPoints);
+
+    if (alignStepIndex + 1 >= alignSteps.length) {
+      // Complete alignment, calculate homography matrices
+      if (!activeLayout.isSplit) {
+        const matrix = computeHomography(newPoints, activeCorners.left);
+        if (matrix) {
+          setComputedHomography(matrix);
+          setPhase('complete');
+        } else {
+          alert("ホモグラフィ計算に失敗しました。点配置に問題があります。やり直してください。");
+          setAlignPoints([]);
+          setAlignStepIndex(0);
+        }
+      } else {
+        // Split layouts: compute Left and Right independently
+        const leftPoints = newPoints.slice(0, 4);
+        const rightPoints = newPoints.slice(4, 8);
+        
+        const leftMatrix = computeHomography(leftPoints, activeCorners.left);
+        const rightMatrix = computeHomography(rightPoints, activeCorners.right!);
+
+        if (leftMatrix && rightMatrix) {
+          setComputedHomography({
+            left: leftMatrix,
+            right: rightMatrix,
+            isSplit: true
+          });
+          setPhase('complete');
+        } else {
+          alert("左右どちらかのホモグラフィ計算に失敗しました。点配置に問題があります。やり直してください。");
+          setAlignPoints([]);
+          setAlignStepIndex(0);
+        }
+      }
+    } else {
+      setAlignStepIndex(prev => prev + 1);
+    }
+  }, [alignStepIndex, alignPoints, alignSteps, activeLayout.isSplit, activeCorners]);
+
   // Key event listeners for calibrating & detecting
   const handlePhysicalKeyPress = useCallback((e: KeyboardEvent) => {
     if (!isReady) return;
@@ -361,68 +426,8 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
         }
       }
     } else if (phase === 'align') {
-      const targetStep = alignSteps[alignStepIndex];
-      if (!targetStep) return;
-
-      // Determine appropriate hand finger tip
-      let pt = null;
-      if (activeLayout.isSplit) {
-        if (alignStepIndex < 4) {
-          // Left half: Left hand preferred
-          pt = latestLeftFingerRef.current || latestRightFingerRef.current;
-        } else {
-          // Right half: Right hand preferred
-          pt = latestRightFingerRef.current || latestLeftFingerRef.current;
-        }
-      } else {
-        pt = latestLeftFingerRef.current || latestRightFingerRef.current;
-      }
-
-      if (!pt) {
-        alert("指先が検知されていません。キーの上に指を置いて押してください。");
-        return;
-      }
-
       e.preventDefault();
-      const newPoints = [...alignPoints, pt];
-      setAlignPoints(newPoints);
-
-      if (alignStepIndex + 1 >= alignSteps.length) {
-        // Complete alignment, calculate homography matrices
-        if (!activeLayout.isSplit) {
-          const matrix = computeHomography(newPoints, activeCorners.left);
-          if (matrix) {
-            setComputedHomography(matrix);
-            setPhase('complete');
-          } else {
-            alert("ホモグラフィ計算に失敗しました。点配置に問題があります。やり直してください。");
-            setAlignPoints([]);
-            setAlignStepIndex(0);
-          }
-        } else {
-          // Split layouts: compute Left and Right independently
-          const leftPoints = newPoints.slice(0, 4);
-          const rightPoints = newPoints.slice(4, 8);
-          
-          const leftMatrix = computeHomography(leftPoints, activeCorners.left);
-          const rightMatrix = computeHomography(rightPoints, activeCorners.right!);
-
-          if (leftMatrix && rightMatrix) {
-            setComputedHomography({
-              left: leftMatrix,
-              right: rightMatrix,
-              isSplit: true
-            });
-            setPhase('complete');
-          } else {
-            alert("左右どちらかのホモグラフィ計算に失敗しました。点配置に問題があります。やり直してください。");
-            setAlignPoints([]);
-            setAlignStepIndex(0);
-          }
-        }
-      } else {
-        setAlignStepIndex(prev => prev + 1);
-      }
+      recordCurrentAlignPoint();
     } else if (phase === 'detectionConfirm') {
       if (e.key === 'Enter') {
         e.preventDefault();
@@ -431,7 +436,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
         setAlignPoints([]);
       }
     }
-  }, [phase, isReady, detectionStep, alignStepIndex, alignPoints, DETECTION_KEYS, alignSteps, activeLayout, activeCorners]);
+  }, [phase, isReady, detectionStep, DETECTION_KEYS, recordCurrentAlignPoint]);
 
   useEffect(() => {
     window.addEventListener('keydown', handlePhysicalKeyPress);
@@ -571,10 +576,34 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
                 Step 2: 四隅の調整 ({alignStepIndex + 1} / {alignSteps.length})
               </div>
               <h2 style={{ fontSize: '1.4rem', margin: '0 0 1rem 0', fontWeight: 400 }}>キーボードの角をタップ</h2>
-              <p style={{ color: '#ccc', lineHeight: '1.6', fontSize: '1.05rem', margin: 0 }}>
+              <p style={{ color: '#ccc', lineHeight: '1.6', fontSize: '1.05rem', margin: '0 0 1rem 0' }}>
                 {alignSteps[alignStepIndex]?.desc}
               </p>
-              <div style={{ marginTop: '1.5rem', fontSize: '0.85rem', color: '#ff007f', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+
+              <button 
+                onClick={recordCurrentAlignPoint}
+                style={{
+                  width: '100%',
+                  background: 'linear-gradient(135deg, #ff007f, #b30059)',
+                  border: 'none',
+                  color: '#fff',
+                  padding: '0.8rem',
+                  borderRadius: '50px',
+                  fontWeight: 'bold',
+                  fontSize: '1rem',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 15px rgba(255, 0, 127, 0.4)',
+                  marginBottom: '1rem'
+                }}
+              >
+                ここを記録 (または任意のキー)
+              </button>
+
+              <p style={{ color: '#888', fontSize: '0.8rem', lineHeight: '1.4', margin: '0 0 1rem 0' }}>
+                ※ Fnキーなど一部のキーは押してもWeb上で反応しません。その場合は指をキーの上に置いたまま、<b>上のボタンをクリック</b>するか、<b>別のキー（Space等）</b>を押してください。
+              </p>
+
+              <div style={{ marginTop: '1rem', fontSize: '0.85rem', color: '#ff007f', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                 {alignSteps.map((step, i) => (
                   <span 
                     key={i} 
