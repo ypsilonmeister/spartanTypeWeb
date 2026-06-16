@@ -374,7 +374,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
 
             if (computedHomography && typeof computedHomography === 'object' && 'isSplit' in computedHomography) {
               drawQuad(alignPointsRef.current.slice(0, 4), 'rgba(0, 173, 181, 1)', activeCorners.left);
-              drawQuad(alignPointsRef.current.slice(4, 8), 'rgba(255, 0, 127, 1)', activeCorners.right!);
+              drawQuad(alignPointsRef.current.slice(5, 9), 'rgba(255, 0, 127, 1)', activeCorners.right!);
             } else {
               drawQuad(alignPointsRef.current, 'rgba(0, 255, 204, 1)', activeCorners.left);
             }
