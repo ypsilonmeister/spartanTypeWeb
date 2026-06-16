@@ -53,6 +53,24 @@ export function getLayoutCorners(layout: KeyboardLayout) {
   };
 }
 
+export function findClosestKeyIndex(layout: KeyboardLayout, target: Point): number {
+  let minDistance = Infinity;
+  let closestIndex = -1;
+  for (let i = 0; i < layout.keys.length; i++) {
+    const key = layout.keys[i];
+    const keyCenter = {
+      x: key.x + key.w / 2,
+      y: key.y + key.h / 2
+    };
+    const dist = Math.hypot(keyCenter.x - target.x, keyCenter.y - target.y);
+    if (dist < minDistance) {
+      minDistance = dist;
+      closestIndex = i;
+    }
+  }
+  return closestIndex;
+}
+
 export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -108,23 +126,23 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
   const alignSteps = useMemo(() => {
     if (!activeLayout.isSplit) {
       return [
-        { label: 'Esc', desc: '【全体】「左上端」のキー（Esc または 1）を人差し指で押してください。', target: activeCorners.left[0] },
-        { label: 'Backspace', desc: '【全体】「右上端」のキー（Backspace または ￥）を人差し指で押してください。', target: activeCorners.left[1] },
-        { label: 'Enter', desc: '【全体】「右下端」のキー（右下Ctrl または 矢印）を人差し指で押してください。', target: activeCorners.left[2] },
-        { label: 'Ctrl', desc: '【全体】「左下端」のキー（左下Ctrl または Shift）を人差し指で押してください。', target: activeCorners.left[3] }
+        { label: '左上端 (Top-Left)', desc: '物理キーボードの「左上端」の角にあるキー（例: Esc や 1）を人差し指で押してください。', target: activeCorners.left[0] },
+        { label: '右上端 (Top-Right)', desc: '物理キーボードの「右上端」の角にあるキー（例: Backspace や ￥）を人差し指で押してください。', target: activeCorners.left[1] },
+        { label: '右下端 (Bottom-Right)', desc: '物理キーボードの「右下端」の角にあるキー（例: Ctrl や 矢印キー）を人差し指で押してください。', target: activeCorners.left[2] },
+        { label: '左下端 (Bottom-Left)', desc: '物理キーボードの「左下端」の角にあるキー（例: Ctrl や Shift）を人差し指で押してください。', target: activeCorners.left[3] }
       ];
     } else {
       return [
         // Left Half
-        { label: 'Esc', desc: '【左半分】「左上端」のキー（Esc または 1）を左手人差し指で押してください。', target: activeCorners.left[0] },
-        { label: '5', desc: '【左半分】「右上端」のキー（5 または T）を左手人差し指で押してください。', target: activeCorners.left[1] },
-        { label: 'Space', desc: '【左半分】「右下端」のキー（左側Space または B）を左手人差し指で押してください。', target: activeCorners.left[2] },
-        { label: 'Ctrl', desc: '【左半分】「左下端」のキー（左下Ctrl または Shift）を左手人差し指で押してください。', target: activeCorners.left[3] },
+        { label: '左半分・左上 (Left-Top-Left)', desc: '【左半分】の左上端にあるキー（例: Esc や 1）を左手人差し指で押してください。', target: activeCorners.left[0] },
+        { label: '左半分・右上 (Left-Top-Right)', desc: '【左半分】の右上端にあるキー（例: 5 や T）を左手人差し指で押してください。', target: activeCorners.left[1] },
+        { label: '左半分・右下 (Left-Bottom-Right)', desc: '【左半分】の右下端にあるキー（例: 左側Space や B）を左手人差し指で押してください。', target: activeCorners.left[2] },
+        { label: '左半分・左下 (Left-Bottom-Left)', desc: '【左半分】の左下端にあるキー（例: 左下Ctrl や Shift）を左手人差し指で押してください。', target: activeCorners.left[3] },
         // Right Half
-        { label: '6', desc: '【右半分】「左上端」のキー（6 または Y）を右手人差し指で押してください。', target: activeCorners.right![0] },
-        { label: 'Backspace', desc: '【右半分】「右上端」のキー（Backspace または =）を右手人差し指で押してください。', target: activeCorners.right![1] },
-        { label: 'Enter', desc: '【右半分】「右下端」のキー（右下Ctrl または 矢印）を右手人差し指で押してください。', target: activeCorners.right![2] },
-        { label: 'Space', desc: '【右半分】「左下端」のキー（右側Space または N）を右手人差し指で押してください。', target: activeCorners.right![3] }
+        { label: '右半分・左上 (Right-Top-Left)', desc: '【右半分】の左上端にあるキー（例: 6 や Y）を右手人差し指で押してください。', target: activeCorners.right![0] },
+        { label: '右半分・右上 (Right-Top-Right)', desc: '【右半分】の右上端にあるキー（例: Backspace や =）を右手人差し指で押してください。', target: activeCorners.right![1] },
+        { label: '右半分・右下 (Right-Bottom-Right)', desc: '【右半分】の右下端にあるキー（例: 右下Ctrl や 矢印）を右手人差し指で押してください。', target: activeCorners.right![2] },
+        { label: '右半分・左下 (Right-Bottom-Left)', desc: '【右半分】の左下端にあるキー（例: 右側Space や N）を右手人差し指で押してください。', target: activeCorners.right![3] }
       ];
     }
   }, [activeLayout, activeCorners]);
@@ -646,10 +664,21 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
           layout={phase === 'detection' ? detectionLayout : activeLayout}
           unitSize={38}
           gap={5}
-          targetKeyLabel={
+          targetKeyIndex={
             phase === 'detection' 
-              ? DETECTION_KEYS[detectionStep]?.label 
-              : (phase === 'align' ? alignSteps[alignStepIndex]?.label : null)
+              ? (
+                  detectionStep === 0 ? detectionLayout.keys.findIndex(k => k.label.toLowerCase() === 'a') :
+                  detectionStep === 1 ? detectionLayout.keys.findIndex(k => k.label.toLowerCase() === 'l') :
+                  detectionStep === 2 ? detectionLayout.keys.findIndex(k => k.label === '') :
+                  detectionStep === 3 ? detectionLayout.keys.findIndex(k => k.label === '[') :
+                  detectionStep === 4 ? detectionLayout.keys.findIndex(k => k.label.toLowerCase() === 'enter') :
+                  null
+                )
+              : (
+                  phase === 'align' 
+                    ? findClosestKeyIndex(activeLayout, alignSteps[alignStepIndex]?.target)
+                    : null
+                )
           }
           pointers={previewPointers}
         />

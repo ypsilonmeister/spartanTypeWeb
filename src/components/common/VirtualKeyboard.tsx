@@ -13,8 +13,8 @@ interface VirtualKeyboardProps {
   pointers?: { x: number, y: number }[];
   /** Currently pressed physical key code to highlight */
   activeKeyCode?: string | null;
-  /** Expected key label to highlight for calibration guidance */
-  targetKeyLabel?: string | null;
+  /** Expected key index in the layout to highlight for calibration guidance */
+  targetKeyIndex?: number | null;
 }
 
 export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
@@ -23,7 +23,7 @@ export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
   gap = 4,
   pointers = [],
   activeKeyCode = null,
-  targetKeyLabel = null,
+  targetKeyIndex = null,
 }) => {
   const containerStyle: React.CSSProperties = useMemo(() => ({
     width: layout.width * unitSize,
@@ -40,11 +40,7 @@ export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
         const height = key.h * unitSize - gap;
         const isActive = activeKeyCode ? matchKLEKey(key.label, activeKeyCode) : false;
         
-        // Simple label matching (case-insensitive substring check)
-        const isTarget = targetKeyLabel
-          ? (key.label.toLowerCase().split('\n').some(part => part.trim() === targetKeyLabel.toLowerCase()) ||
-             (targetKeyLabel.toLowerCase() === 'space' && key.label === ''))
-          : false;
+        const isTarget = targetKeyIndex !== null && targetKeyIndex !== undefined ? index === targetKeyIndex : false;
 
         let bg = key.c || '#333333';
         let tc = key.t || '#ffffff';
