@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 
 export function useWorker() {
+  // NOTE: must be a CLASSIC worker (no `{ type: 'module' }`).
+  // MediaPipe's WASM loader uses importScripts() internally, which is forbidden
+  // in module workers and throws "ModuleFactory not set". Vite inlines the
+  // static imports below into a single classic worker bundle.
   const [worker] = useState<Worker>(() => new Worker(
-    new URL('../workers/handTracker.worker.ts', import.meta.url), 
-    { type: 'module' }
+    new URL('../workers/handTracker.worker.ts', import.meta.url)
   ));
   const [isWorkerReady, setIsWorkerReady] = useState(false);
   const [workerError, setWorkerError] = useState<string | null>(null);
