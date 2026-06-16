@@ -44,6 +44,7 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
     video.src = url;
 
     video.onloadeddata = () => {
+      console.log(`[Analysis] Video metadata loaded. Resolution: ${video.videoWidth}x${video.videoHeight}, Duration: ${video.duration.toFixed(2)}s`);
       video.width = video.videoWidth;
       video.height = video.videoHeight;
       canvas.width = video.videoWidth;
@@ -53,21 +54,27 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
       // Play back fast for analysis
       video.playbackRate = 1.0; 
       video.play();
+      console.log("[Analysis] Video playback started.");
       
       const dummyEngine = new TypingEngine(layout, unanalyzedData.homography);
       dummyEngine.startSession(); 
       
       let pendingFrames = 0;
       let lastProcessedTime = -1;
+      let frameCounter = 0;
 
       const handleWorkerMessage = (e: MessageEvent) => {
         if (e.data.type === 'DETECT_RESULT') {
           pendingFrames--;
           const { results, timestamp } = e.data;
           
+          frameCounter++;
+          if (frameCounter % 30 === 0) {
+            console.log(`[Analysis] Processed ${frameCounter} frames. Video Time: ${video.currentTime.toFixed(2)}s / ${video.duration.toFixed(2)}s. Queue: ${pendingFrames}`);
+          }
+          
           if (results && results.landmarks && results.landmarks.length > 0) {
             const handsData = results.landmarks.map((landmarks: { x: number; y: number; z: number }[], index: number) => {
-              // Extract handedness from results.handednesses
               const catName = results.handednesses?.[index]?.[0]?.categoryName;
               const handedness: 'Left' | 'Right' = (catName === 'Left' || catName === 'Right')
                 ? catName
@@ -81,7 +88,7 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
           }
         } else if (e.data.type === 'DETECT_ERROR') {
           pendingFrames--;
-          console.error('Worker detection frame error:', e.data.error);
+          console.error('[Analysis] Worker detection frame error:', e.data.error);
         }
       };
 
@@ -99,6 +106,7 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
             URL.revokeObjectURL(url);
             
             setStatus('Finalizing session data...');
+            console.log(`[Analysis] Frame processing complete. Total analyzed frames: ${frameCounter}. Exporting session JSON...`);
             dummyEngine.loadKeystrokes(unanalyzedData.keystrokes);
             const finalJson = dummyEngine.exportSession();
             onAnalysisComplete(JSON.parse(finalJson));
@@ -117,7 +125,7 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
               pendingFrames++;
               const timestamp = video.currentTime * 1000;
               worker.postMessage({ type: 'DETECT', image: bitmap, timestamp }, [bitmap]);
-            }).catch(err => console.error("Bitmap creation failed:", err));
+            }).catch(err => console.error("[Analysis] Bitmap creation failed:", err));
           }
         }
         
@@ -138,7 +146,7 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
     };
 
     video.onerror = (e) => {
-      console.error("Video playback error", e);
+      console.error("[Analysis] Video playback error:", e);
       setStatus('Failed to load recorded video.');
     };
 
