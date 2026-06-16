@@ -88,6 +88,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
   const detectionLayout = useMemo(() => parseKLE(LAYOUT_PRESETS['us-standard'].data, false), []);
   const activePreset = useMemo(() => LAYOUT_PRESETS[presetId as keyof typeof LAYOUT_PRESETS], [presetId]);
   const activeLayout = useMemo(() => parseKLE(activePreset.data, activePreset.isSplit), [activePreset]);
+  const activeCorners = useMemo(() => getLayoutCorners(activeLayout), [activeLayout]);
 
   // Calibration tracking points
   const [alignPoints, setAlignPoints] = useState<Point[]>([]);
@@ -100,8 +101,44 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
   // Mapped live pointers for complete preview
   const [previewPointers, setPreviewPointers] = useState<Point[]>([]);
 
-  // Homography calculations
-  const [computedHomography, setComputedHomography] = useState<CalibrationHomography | null>(null);
+  // Homography calculations (derived from alignPoints during 'complete' phase)
+  const computedHomography = useMemo<CalibrationHomography | null>(() => {
+    if (phase !== 'complete' || alignPoints.length < (activeLayout.isSplit ? 10 : 6)) {
+      return null;
+    }
+
+    try {
+      if (!activeLayout.isSplit) {
+        const matrix = computeHomography(alignPoints.slice(0, 4), activeCorners.left);
+        return matrix;
+      } else {
+        const leftPoints = alignPoints.slice(0, 4);
+        const rightPoints = alignPoints.slice(5, 9);
+        
+        const leftMatrix = computeHomography(leftPoints, activeCorners.left);
+        const rightMatrix = computeHomography(rightPoints, activeCorners.right!);
+
+        if (leftMatrix && rightMatrix) {
+          return {
+            left: leftMatrix,
+            right: rightMatrix,
+            isSplit: true
+          };
+        }
+        return null;
+      }
+    } catch (e) {
+      console.error("Failed to compute homography in memo", e);
+      return null;
+    }
+  }, [alignPoints, phase, activeLayout.isSplit, activeCorners]);
+
+  // Mouse drag-and-drop state for point fine-tuning
+  const [draggedPointIndex, setDraggedPointIndex] = useState<number | null>(null);
+  const draggedPointIndexRef = useRef<number | null>(null);
+  useEffect(() => {
+    draggedPointIndexRef.current = draggedPointIndex;
+  }, [draggedPointIndex]);
 
   // Calibrated home position pointers
   const homePointers = useMemo<Point[]>(() => {
@@ -148,8 +185,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
     { label: 'Enter', code: 'Enter', key: 'Enter', desc: '物理キーボードの「Enter」キーを右手で1度叩いてください。' }
   ], []);
 
-  // Compute dynamic corners
-  const activeCorners = useMemo(() => getLayoutCorners(activeLayout), [activeLayout]);
+
 
   // Expected calibration steps based on selected layout
   const alignSteps = useMemo(() => {
@@ -342,6 +378,81 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
             } else {
               drawQuad(alignPointsRef.current, 'rgba(0, 255, 204, 1)', activeCorners.left);
             }
+
+            // Draw interactive point handles
+            alignPointsRef.current.forEach((pt, idx) => {
+              const isHome = activeLayout.isSplit ? (idx === 4 || idx === 9) : (idx === 4 || idx === 5);
+              let color = '#00adb5'; // Cyan default
+              if (activeLayout.isSplit) {
+                if (idx >= 5) color = '#ff007f'; // Magenta for right half
+              } else {
+                if (idx === 5) color = '#ff007f';
+              }
+              if (isHome) color = '#00ff88'; // Neon green for home anchors!
+
+              const isDragging = idx === draggedPointIndexRef.current;
+
+              ctx.save();
+              ctx.shadowBlur = isDragging ? 20 : 10;
+              ctx.shadowColor = color;
+              
+              // Outer circle
+              ctx.beginPath();
+              ctx.arc(pt.x, pt.y, isDragging ? 10 : 7, 0, 2 * Math.PI);
+              ctx.fillStyle = color;
+              ctx.fill();
+              ctx.strokeStyle = '#ffffff';
+              ctx.lineWidth = 1.5;
+              ctx.stroke();
+
+              // Inner dot
+              ctx.beginPath();
+              ctx.arc(pt.x, pt.y, 2.5, 0, 2 * Math.PI);
+              ctx.fillStyle = '#ffffff';
+              ctx.fill();
+              
+              ctx.shadowBlur = 0;
+
+              // Text label
+              let label = '';
+              if (!activeLayout.isSplit) {
+                if (idx === 0) label = '左上';
+                else if (idx === 1) label = '右上';
+                else if (idx === 2) label = '右下';
+                else if (idx === 3) label = '左下';
+                else if (idx === 4) label = 'F';
+                else if (idx === 5) label = 'J';
+              } else {
+                if (idx === 0) label = '左・上左';
+                else if (idx === 1) label = '左・上右';
+                else if (idx === 2) label = '左・下右';
+                else if (idx === 3) label = '左・下左';
+                else if (idx === 4) label = '左F';
+                else if (idx === 5) label = '右・上左';
+                else if (idx === 6) label = '右・上右';
+                else if (idx === 7) label = '右・下右';
+                else if (idx === 8) label = '右・下左';
+                else if (idx === 9) label = '右J';
+              }
+
+              ctx.font = 'bold 11px Inter, sans-serif';
+              const textWidth = ctx.measureText(label).width;
+              const textX = pt.x + 12;
+              const textY = pt.y + 4;
+
+              // Background card for text label
+              ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+              ctx.fillRect(textX - 4, textY - 12, textWidth + 8, 16);
+              ctx.strokeStyle = color;
+              ctx.lineWidth = 1;
+              ctx.strokeRect(textX - 4, textY - 12, textWidth + 8, 16);
+
+              // Text
+              ctx.fillStyle = '#ffffff';
+              ctx.fillText(label, textX, textY - 1);
+              ctx.restore();
+            });
+
             ctx.restore();
           }
         }
@@ -386,43 +497,11 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
     setAlignPoints(newPoints);
 
     if (alignStepIndex + 1 >= alignSteps.length) {
-      // Complete alignment, calculate homography matrices
-      if (!activeLayout.isSplit) {
-        // Use first 4 points (corners) for homography
-        const matrix = computeHomography(newPoints.slice(0, 4), activeCorners.left);
-        if (matrix) {
-          setComputedHomography(matrix);
-          setPhase('complete');
-        } else {
-          alert("ホモグラフィ計算に失敗しました。点配置に問題があります。やり直してください。");
-          setAlignPoints([]);
-          setAlignStepIndex(0);
-        }
-      } else {
-        // Split layouts: compute Left (0-3) and Right (5-8) independently
-        const leftPoints = newPoints.slice(0, 4);
-        const rightPoints = newPoints.slice(5, 9);
-        
-        const leftMatrix = computeHomography(leftPoints, activeCorners.left);
-        const rightMatrix = computeHomography(rightPoints, activeCorners.right!);
-
-        if (leftMatrix && rightMatrix) {
-          setComputedHomography({
-            left: leftMatrix,
-            right: rightMatrix,
-            isSplit: true
-          });
-          setPhase('complete');
-        } else {
-          alert("左右どちらかのホモグラフィ計算に失敗しました。点配置に問題があります。やり直してください。");
-          setAlignPoints([]);
-          setAlignStepIndex(0);
-        }
-      }
+      setPhase('complete');
     } else {
       setAlignStepIndex(prev => prev + 1);
     }
-  }, [alignStepIndex, alignPoints, alignSteps, activeLayout.isSplit, activeCorners]);
+  }, [alignStepIndex, alignPoints, alignSteps, activeLayout.isSplit]);
 
   // Key event listeners for calibrating & detecting
   const handlePhysicalKeyPress = useCallback((e: KeyboardEvent) => {
@@ -487,13 +566,71 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
     return () => window.removeEventListener('keydown', handlePhysicalKeyPress);
   }, [handlePhysicalKeyPress]);
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     setPhase('detection');
     setDetectionStep(0);
     setAlignPoints([]);
     setAlignStepIndex(0);
-    setComputedHomography(null);
-  };
+    setDraggedPointIndex(null);
+  }, []);
+
+  // Mouse drag fine-tuning logic on the camera canvas
+  const handleCanvasMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (phase !== 'complete') return;
+    
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const mx = ((e.clientX - rect.left) / rect.width) * canvas.width;
+    const my = ((e.clientY - rect.top) / rect.height) * canvas.height;
+    
+    // Find closest point in alignPoints
+    let closestIndex = -1;
+    let minDistance = Infinity;
+    
+    for (let i = 0; i < alignPoints.length; i++) {
+      const pt = alignPoints[i];
+      const dist = Math.hypot(pt.x - mx, pt.y - my);
+      if (dist < minDistance) {
+        minDistance = dist;
+        closestIndex = i;
+      }
+    }
+    
+    // Lock drag if close enough (within 20 pixels)
+    if (closestIndex !== -1 && minDistance < 20) {
+      setDraggedPointIndex(closestIndex);
+    }
+  }, [phase, alignPoints]);
+
+  const handleCanvasMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (phase !== 'complete' || draggedPointIndexRef.current === null) return;
+    
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const mx = ((e.clientX - rect.left) / rect.width) * canvas.width;
+    const my = ((e.clientY - rect.top) / rect.height) * canvas.height;
+    
+    const targetIdx = draggedPointIndexRef.current;
+    setAlignPoints(prev => {
+      const updated = [...prev];
+      if (updated[targetIdx]) {
+        updated[targetIdx] = { x: mx, y: my };
+      }
+      return updated;
+    });
+  }, [phase]);
+
+  const handleCanvasMouseUp = useCallback(() => {
+    setDraggedPointIndex(null);
+  }, []);
+
+  const handleCanvasMouseLeave = useCallback(() => {
+    setDraggedPointIndex(null);
+  }, []);
 
   const handleLayoutPresetToggle = (preset: LayoutPresetId) => {
     setPresetId(preset);
@@ -511,7 +648,15 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
             {(error || modelError) && <div className="error-message">{error || modelError}</div>}
             {!isReady && !error && !modelError && <div className="loading-message">Initializing Hand Tracker AI...</div>}
             <video ref={videoRef} autoPlay playsInline muted style={{ display: 'none' }} />
-            <canvas ref={canvasRef} className="camera-canvas" />
+            <canvas 
+              ref={canvasRef} 
+              className="camera-canvas"
+              onMouseDown={handleCanvasMouseDown}
+              onMouseMove={handleCanvasMouseMove}
+              onMouseUp={handleCanvasMouseUp}
+              onMouseLeave={handleCanvasMouseLeave}
+              style={{ cursor: phase === 'complete' ? (draggedPointIndex !== null ? 'grabbing' : 'grab') : 'default' }}
+            />
           </div>
         </div>
 
