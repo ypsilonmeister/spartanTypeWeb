@@ -7,6 +7,8 @@ export type CalibrationHomography =
 export interface CalibrationConfig {
   layoutPresetId: string;
   homography: CalibrationHomography;
+  customLayoutData?: unknown;
+  customLayoutIsSplit?: boolean;
 }
 
 const STORAGE_KEY = 'spartan-calibration-config-v2';

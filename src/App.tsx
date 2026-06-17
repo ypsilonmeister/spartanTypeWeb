@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { parseKLE } from './utils/kleParser';
+import { parseKLE, parseLayoutJSON } from './utils/kleParser';
 import { TrainerScreen } from './components/trainer/TrainerScreen';
 import { CalibrationScreen } from './components/calibration/CalibrationScreen';
 import { DashboardScreen } from './components/dashboard/DashboardScreen';
@@ -11,19 +11,41 @@ import type { LayoutPresetId } from './assets/layoutTemplates';
 
 function App() {
   const savedConfig = useMemo(() => loadCalibration(), []);
-  const [layoutPresetId, setLayoutPresetId] = useState<LayoutPresetId>(savedConfig ? savedConfig.layoutPresetId as LayoutPresetId : 'us-standard');
+  const [layoutPresetId, setLayoutPresetId] = useState<LayoutPresetId | 'custom'>(savedConfig ? savedConfig.layoutPresetId as LayoutPresetId | 'custom' : 'us-standard');
   const [homography, setHomography] = useState<CalibrationHomography | null>(savedConfig ? savedConfig.homography : null);
   const [mode, setMode] = useState<'calibration' | 'trainer' | 'dashboard'>(savedConfig ? 'trainer' : 'calibration');
   const [unanalyzedData, setUnanalyzedData] = useState<UnanalyzedSessionData | null>(null);
+  
+  const [customLayoutData, setCustomLayoutData] = useState<unknown | null>(savedConfig?.customLayoutData || null);
+  const [customLayoutIsSplit, setCustomLayoutIsSplit] = useState<boolean>(savedConfig?.customLayoutIsSplit || false);
 
   const layout = useMemo(() => {
-    const preset = LAYOUT_PRESETS[layoutPresetId as keyof typeof LAYOUT_PRESETS];
+    if (layoutPresetId === 'custom' && customLayoutData) {
+      try {
+        return parseLayoutJSON(JSON.stringify(customLayoutData), customLayoutIsSplit);
+      } catch (e) {
+        console.error("Failed to parse custom layout in App", e);
+      }
+    }
+    const preset = LAYOUT_PRESETS[layoutPresetId as keyof typeof LAYOUT_PRESETS] || LAYOUT_PRESETS['us-standard'];
     return parseKLE(preset.data, preset.isSplit);
-  }, [layoutPresetId]);
+  }, [layoutPresetId, customLayoutData, customLayoutIsSplit]);
 
-  const handleCalibrationComplete = (presetId: string, calibration: CalibrationHomography) => {
-    saveCalibration({ layoutPresetId: presetId, homography: calibration });
-    setLayoutPresetId(presetId as LayoutPresetId);
+  const handleCalibrationComplete = (
+    presetId: string, 
+    calibration: CalibrationHomography,
+    customData?: unknown,
+    customIsSplit?: boolean
+  ) => {
+    saveCalibration({ 
+      layoutPresetId: presetId, 
+      homography: calibration,
+      customLayoutData: customData,
+      customLayoutIsSplit: customIsSplit
+    });
+    setLayoutPresetId(presetId as LayoutPresetId | 'custom');
+    if (customData !== undefined) setCustomLayoutData(customData);
+    if (customIsSplit !== undefined) setCustomLayoutIsSplit(customIsSplit);
     setHomography(calibration);
     setMode('trainer');
   };
@@ -101,6 +123,8 @@ function App() {
       {mode === 'calibration' && (
         <CalibrationScreen 
           onComplete={handleCalibrationComplete} 
+          initialCustomLayoutData={customLayoutData}
+          initialCustomLayoutIsSplit={customLayoutIsSplit}
         />
       )}
       

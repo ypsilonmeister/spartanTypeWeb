@@ -33,7 +33,14 @@ export const JIS_60_SPLIT_DATA: unknown[] = [
   [{ w: 1.25 }, "Ctrl", { w: 1 }, "Win", { w: 1.25 }, "Alt", "無変換", { w: 2.25 }, "Space", { x: 2, w: 2.25 }, "Space", "変換", "かな", { w: 1.25 }, "Alt", { w: 1.25 }, "Ctrl"]
 ];
 
-export type LayoutPresetId = 'us-standard' | 'jis-standard' | 'us-split' | 'jis-split';
+export const SPLIT_36_DATA: unknown[] = [
+  [{ a: 4 }, "Q", "W", "E", "R", "T", { x: 2 }, "Y", "U", "I", "O", "P"],
+  ["A", "S", "D", "F", "G", { x: 2 }, "H", "J", "K", "L", ";"],
+  ["Z", "X", "C", "V", "B", { x: 2 }, "N", "M", ",", ".", "/"],
+  [{ x: 2 }, "Tab", "Space", "Esc", { x: 2 }, "Enter", "Backspace", "Del"]
+];
+
+export type LayoutPresetId = 'us-standard' | 'jis-standard' | 'us-split' | 'jis-split' | 'split-36';
 
 export const LAYOUT_PRESETS: Record<LayoutPresetId, { name: string, data: unknown[], isSplit: boolean }> = {
   'us-standard': {
@@ -54,6 +61,11 @@ export const LAYOUT_PRESETS: Record<LayoutPresetId, { name: string, data: unknow
   'jis-split': {
     name: 'JIS Split 60%',
     data: JIS_60_SPLIT_DATA,
+    isSplit: true
+  },
+  'split-36': {
+    name: 'Split 36-key',
+    data: SPLIT_36_DATA,
     isSplit: true
   }
 };

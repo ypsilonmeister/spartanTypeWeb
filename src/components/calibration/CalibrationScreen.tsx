@@ -2,8 +2,8 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useWebcam } from '../../hooks/useWebcam';
 import { HandTracker } from '../../utils/handTracker';
 import { DrawingUtils, HandLandmarker } from '@mediapipe/tasks-vision';
-import { parseKLE } from '../../utils/kleParser';
-import type { KeyboardLayout } from '../../types/kle';
+import { parseKLE, parseLayoutJSON } from '../../utils/kleParser';
+import type { KeyboardLayout, Key } from '../../types/kle';
 import { VirtualKeyboard } from '../common/VirtualKeyboard';
 import { computeHomography, applyHomography } from '../../utils/homography';
 import type { Point, HomographyMatrix } from '../../utils/homography';
@@ -13,7 +13,14 @@ import type { CalibrationHomography } from '../../utils/calibrationStorage';
 import '../../styles/cameraPreview.css';
 
 interface CalibrationScreenProps {
-  onComplete: (presetId: string, homography: CalibrationHomography) => void;
+  onComplete: (
+    presetId: string, 
+    homography: CalibrationHomography,
+    customLayoutData?: unknown,
+    customLayoutIsSplit?: boolean
+  ) => void;
+  initialCustomLayoutData?: unknown | null;
+  initialCustomLayoutIsSplit?: boolean;
 }
 
 type CalibrationPhase = 'detection' | 'detectionConfirm' | 'align' | 'complete';
@@ -34,8 +41,8 @@ function getLayoutCorners(layout: KeyboardLayout) {
   const leftKeys = layout.keys.filter(k => k.x + k.w / 2 < midX);
   const rightKeys = layout.keys.filter(k => k.x + k.w / 2 >= midX);
 
-  const leftMaxX = Math.max(...leftKeys.map(k => k.x + k.w));
-  const rightMinX = Math.min(...rightKeys.map(k => k.x));
+  const leftMaxX = Math.max(...leftKeys.map(k => k.x + k.w), midX);
+  const rightMinX = Math.min(...rightKeys.map(k => k.x), midX);
 
   return {
     left: [
@@ -51,6 +58,137 @@ function getLayoutCorners(layout: KeyboardLayout) {
       { x: rightMinX, y: layout.height }
     ]
   };
+}
+
+export interface CalibrationTarget {
+  label: string;
+  desc: string;
+  target: Point;
+}
+
+function getCalibrationKeys(layout: KeyboardLayout): CalibrationTarget[] {
+  const findCornerKeys = (keysList: Key[], offsetMinX: number) => {
+    if (keysList.length === 0) {
+      return {
+        tl: { x: offsetMinX + 0.5, y: 0.5 },
+        tr: { x: offsetMinX + 4.5, y: 0.5 },
+        br: { x: offsetMinX + 4.5, y: 2.5 },
+        bl: { x: offsetMinX + 0.5, y: 2.5 },
+        tlLabel: 'TL',
+        trLabel: 'TR',
+        brLabel: 'BR',
+        blLabel: 'BL'
+      };
+    }
+
+    const minX = Math.min(...keysList.map(k => k.x));
+    const maxX = Math.max(...keysList.map(k => k.x + k.w));
+    const minY = Math.min(...keysList.map(k => k.y));
+    const maxY = Math.max(...keysList.map(k => k.y + k.h));
+
+    let tlKey = keysList[0];
+    let trKey = keysList[0];
+    let blKey = keysList[0];
+    let brKey = keysList[0];
+
+    let tlMin = Infinity;
+    let trMin = Infinity;
+    let blMin = Infinity;
+    let brMin = Infinity;
+
+    for (const k of keysList) {
+      const tlScore = (k.x - minX) + (k.y - minY) * 2;
+      if (tlScore < tlMin) {
+        tlMin = tlScore;
+        tlKey = k;
+      }
+
+      const trScore = (maxX - (k.x + k.w)) + (k.y - minY) * 2;
+      if (trScore < trMin) {
+        trMin = trScore;
+        trKey = k;
+      }
+
+      const blScore = (k.x - minX) + (maxY - (k.y + k.h)) * 2;
+      if (blScore < blMin) {
+        blMin = blScore;
+        blKey = k;
+      }
+
+      const brScore = (maxX - (k.x + k.w)) + (maxY - (k.y + k.h)) * 2;
+      if (brScore < brMin) {
+        brMin = brScore;
+        brKey = k;
+      }
+    }
+
+    const keyCenter = (k: Key) => ({
+      x: k.x + k.w / 2,
+      y: k.y + k.h / 2
+    });
+
+    return {
+      tl: keyCenter(tlKey),
+      tr: keyCenter(trKey),
+      br: keyCenter(brKey),
+      bl: keyCenter(blKey),
+      tlLabel: tlKey.label.replace(/\n/g, ' '),
+      trLabel: trKey.label.replace(/\n/g, ' '),
+      brLabel: brKey.label.replace(/\n/g, ' '),
+      blLabel: blKey.label.replace(/\n/g, ' ')
+    };
+  };
+
+  const findHomeKey = (keysList: Key[], searchChar: string, defaultPt: Point): { target: Point, label: string } => {
+    const found = keysList.find(k => k.label.toLowerCase().split('\n').includes(searchChar));
+    if (found) {
+      return {
+        target: { x: found.x + found.w / 2, y: found.y + found.h / 2 },
+        label: found.label.replace(/\n/g, ' ')
+      };
+    }
+    return { target: defaultPt, label: searchChar.toUpperCase() };
+  };
+
+  if (!layout.isSplit) {
+    const corners = findCornerKeys(layout.keys, 0);
+    const fHome = findHomeKey(layout.keys, 'f', { x: 4.5, y: 2.5 });
+    const jHome = findHomeKey(layout.keys, 'j', { x: 7.5, y: 2.5 });
+
+    return [
+      { label: `左上・${corners.tlLabel}`, desc: `物理キーボードの左上端にある「${corners.tlLabel}」キーを人差し指で押してください。`, target: corners.tl },
+      { label: `右上・${corners.trLabel}`, desc: `物理キーボードの右上端にある「${corners.trLabel}」キーを人差し指で押してください。`, target: corners.tr },
+      { label: `右下・${corners.brLabel}`, desc: `物理キーボードの右下端にある「${corners.brLabel}」キーを人差し指で押してください。`, target: corners.br },
+      { label: `左下・${corners.blLabel}`, desc: `物理キーボードの左下端にある「${corners.blLabel}」キーを人差し指で押してください。`, target: corners.bl },
+      { label: `ホーム ${fHome.label}`, desc: `左手ホームポジションの「${fHome.label}」キーを左手人差し指で押してください。`, target: fHome.target },
+      { label: `ホーム ${jHome.label}`, desc: `右手ホームポジションの「${jHome.label}」キーを右手人差し指で押してください。`, target: jHome.target }
+    ];
+  } else {
+    const midX = layout.width / 2;
+    const leftKeys = layout.keys.filter(k => k.x + k.w / 2 < midX);
+    const rightKeys = layout.keys.filter(k => k.x + k.w / 2 >= midX);
+
+    const leftCorners = findCornerKeys(leftKeys, 0);
+    const rightCorners = findCornerKeys(rightKeys, midX);
+
+    const fHome = findHomeKey(leftKeys, 'f', { x: 4.5, y: 2.5 });
+    const jHome = findHomeKey(rightKeys, 'j', { x: 7.5, y: 2.5 });
+
+    return [
+      // Left half
+      { label: `左・上左 (${leftCorners.tlLabel})`, desc: `【左半分】の左上端にある「${leftCorners.tlLabel}」キーを左手人差し指で押してください。`, target: leftCorners.tl },
+      { label: `左・上右 (${leftCorners.trLabel})`, desc: `【左半分】の右上端にある「${leftCorners.trLabel}」キーを左手人差し指で押してください。`, target: leftCorners.tr },
+      { label: `左・下右 (${leftCorners.brLabel})`, desc: `【左半分】の右下端にある「${leftCorners.brLabel}」キーを左手人差し指で押してください。`, target: leftCorners.br },
+      { label: `左・下左 (${leftCorners.blLabel})`, desc: `【左半分】の左下端にある「${leftCorners.blLabel}」キーを左手人差し指で押してください。`, target: leftCorners.bl },
+      { label: `左ホーム ${fHome.label}`, desc: `【左半分】のホームポジション「${fHome.label}」キーを左手人差し指で押してください。`, target: fHome.target },
+      // Right half
+      { label: `右・上左 (${rightCorners.tlLabel})`, desc: `【右半分】の左上端にある「${rightCorners.tlLabel}」キーを右手人差し指で押してください。`, target: rightCorners.tl },
+      { label: `右・上右 (${rightCorners.trLabel})`, desc: `【右半分】の右上端にある「${rightCorners.trLabel}」キーを右手人差し指で押してください。`, target: rightCorners.tr },
+      { label: `右・下右 (${rightCorners.brLabel})`, desc: `【右半分】の右下端にある「${rightCorners.brLabel}」キーを右手人差し指で押してください。`, target: rightCorners.br },
+      { label: `右・下左 (${rightCorners.blLabel})`, desc: `【右半分】の左下端にある「${rightCorners.blLabel}」キーを右手人差し指で押してください。`, target: rightCorners.bl },
+      { label: `右ホーム ${jHome.label}`, desc: `【右半分】のホームポジション「${jHome.label}」キーを右手人差し指で押してください。`, target: jHome.target }
+    ];
+  }
 }
 
 function findClosestKeyIndex(layout: KeyboardLayout, target: Point): number {
@@ -71,7 +209,11 @@ function findClosestKeyIndex(layout: KeyboardLayout, target: Point): number {
   return closestIndex;
 }
 
-export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete }) => {
+export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ 
+  onComplete,
+  initialCustomLayoutData = null,
+  initialCustomLayoutIsSplit = false
+}) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { error } = useWebcam(videoRef);
@@ -82,13 +224,32 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
   const [phase, setPhase] = useState<CalibrationPhase>('detection');
   
   // Layout presets selection
-  const [presetId, setPresetId] = useState<LayoutPresetId>('us-standard');
+  const [presetId, setPresetId] = useState<LayoutPresetId | 'custom'>('us-standard');
+
+  const [uploadedData, setUploadedData] = useState<unknown>(initialCustomLayoutData);
+  const [uploadedIsSplit, setUploadedIsSplit] = useState<boolean>(initialCustomLayoutIsSplit);
 
   // Active layouts
   const detectionLayout = useMemo(() => parseKLE(LAYOUT_PRESETS['us-standard'].data, false), []);
-  const activePreset = useMemo(() => LAYOUT_PRESETS[presetId as keyof typeof LAYOUT_PRESETS], [presetId]);
-  const activeLayout = useMemo(() => parseKLE(activePreset.data, activePreset.isSplit), [activePreset]);
+
+  const activeLayout = useMemo(() => {
+    if (presetId === 'custom' && uploadedData) {
+      try {
+        return parseLayoutJSON(JSON.stringify(uploadedData), uploadedIsSplit);
+      } catch (e) {
+        console.error("Failed to parse custom layout", e);
+      }
+    }
+    const preset = LAYOUT_PRESETS[presetId as keyof typeof LAYOUT_PRESETS] || LAYOUT_PRESETS['us-standard'];
+    return parseKLE(preset.data, preset.isSplit);
+  }, [presetId, uploadedData, uploadedIsSplit]);
+
   const activeCorners = useMemo(() => getLayoutCorners(activeLayout), [activeLayout]);
+
+  // Expected calibration steps based on active layout
+  const alignSteps = useMemo(() => {
+    return getCalibrationKeys(activeLayout);
+  }, [activeLayout]);
 
   // Calibration tracking points
   const [alignPoints, setAlignPoints] = useState<Point[]>([]);
@@ -108,16 +269,17 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
     }
 
     try {
+      const targets = alignSteps.map(s => s.target);
       if (!activeLayout.isSplit) {
-        const matrix = computeHomography(alignPoints.slice(0, 4), activeCorners.left);
+        const matrix = computeHomography(alignPoints.slice(0, 4), targets.slice(0, 4));
         return matrix;
       } else {
         const leftPoints = alignPoints.slice(0, 4);
         const rightPoints = alignPoints.slice(5, 9);
         
-        const leftMatrix = computeHomography(leftPoints, activeCorners.left);
-        const rightMatrix = computeHomography(rightPoints, activeCorners.right!);
-
+        const leftMatrix = computeHomography(leftPoints, targets.slice(0, 4));
+        const rightMatrix = computeHomography(rightPoints, targets.slice(5, 9));
+        
         if (leftMatrix && rightMatrix) {
           return {
             left: leftMatrix,
@@ -131,7 +293,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
       console.error("Failed to compute homography in memo", e);
       return null;
     }
-  }, [alignPoints, phase, activeLayout.isSplit, activeCorners]);
+  }, [alignPoints, phase, activeLayout.isSplit, alignSteps]);
 
   // Mouse drag-and-drop state for point fine-tuning
   const [draggedPointIndex, setDraggedPointIndex] = useState<number | null>(null);
@@ -142,10 +304,9 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
 
   // Calibrated home position pointers
   const homePointers = useMemo<Point[]>(() => {
-    if (!computedHomography || alignPoints.length < 6) return [];
+    if (!computedHomography || alignPoints.length < (activeLayout.isSplit ? 10 : 6)) return [];
     try {
       if ('isSplit' in computedHomography && computedHomography.isSplit) {
-        if (alignPoints.length < 10) return [];
         const leftMatrix = computedHomography.left;
         const rightMatrix = computedHomography.right;
         const leftF = alignPoints[4];
@@ -167,7 +328,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
       console.error("Failed to map home pointers", e);
       return [];
     }
-  }, [computedHomography, alignPoints]);
+  }, [computedHomography, alignPoints, activeLayout.isSplit]);
 
   // Step 1: Layout Auto-Detection config
   const [detectionStep, setDetectionStep] = useState(0);
@@ -184,48 +345,10 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
     },
     { label: 'Enter', code: 'Enter', key: 'Enter', desc: '物理キーボードの「Enter」キーを右手で1度叩いてください。' }
   ], []);
-
-
-
-  // Expected calibration steps based on selected layout
-  const alignSteps = useMemo(() => {
-    const fKey = activeLayout.keys.find(k => k.label.toLowerCase().split('\n').includes('f'));
-    const jKey = activeLayout.keys.find(k => k.label.toLowerCase().split('\n').includes('j'));
-    const fTarget = fKey ? { x: fKey.x + fKey.w / 2, y: fKey.y + fKey.h / 2 } : { x: 4.5, y: 2.5 };
-    const jTarget = jKey ? { x: jKey.x + jKey.w / 2, y: jKey.y + jKey.h / 2 } : { x: 7.5, y: 2.5 };
-
-    if (!activeLayout.isSplit) {
-      return [
-        { label: '左上端 (Top-Left)', desc: '物理キーボードの「左上端」の角にあるキー（例: Esc や 1）を人差し指で押してください。', target: activeCorners.left[0] },
-        { label: '右上端 (Top-Right)', desc: '物理キーボードの「右上端」の角にあるキー（例: Backspace や ￥）を人差し指で押してください。', target: activeCorners.left[1] },
-        { label: '右下端 (Bottom-Right)', desc: '物理キーボードの「右下端」の角にあるキー（例: Ctrl や 矢印キー）を人差し指で押してください。', target: activeCorners.left[2] },
-        { label: '左下端 (Bottom-Left)', desc: '物理キーボードの「左下端」の角にあるキー（例: Ctrl や Shift）を人差し指で押してください。', target: activeCorners.left[3] },
-        { label: 'ホーム F (Home F)', desc: '左手ホームポジションの「F」キーを左手人差し指で押してください。', target: fTarget },
-        { label: 'ホーム J (Home J)', desc: '右手ホームポジションの「J」キーを右手人差し指で押してください。', target: jTarget }
-      ];
-    } else {
-      return [
-        // Left Half
-        { label: '左半分・左上 (Left-Top-Left)', desc: '【左半分】の左上端にあるキー（例: Esc や 1）を左手人差し指で押してください。', target: activeCorners.left[0] },
-        { label: '左半分・右上 (Left-Top-Right)', desc: '【左半分】の右上端にあるキー（例: 5 や T）を左手人差し指で押してください。', target: activeCorners.left[1] },
-        { label: '左半分・右下 (Left-Bottom-Right)', desc: '【左半分】の右下端にあるキー（例: 左側Space や B）を左手人差し指で押してください。', target: activeCorners.left[2] },
-        { label: '左半分・左下 (Left-Bottom-Left)', desc: '【左半分】の左下端にあるキー（例: 左下Ctrl や Shift）を左手人差し指で押してください。', target: activeCorners.left[3] },
-        { label: '左半分・ホーム F (Left-Home F)', desc: '【左半分】のホームポジション「F」キーを左手人差し指で押してください。', target: fTarget },
-        // Right Half
-        { label: '右半分・左上 (Right-Top-Left)', desc: '【右半分】の左上端にあるキー（例: 6 や Y）を右手人差し指で押してください。', target: activeCorners.right![0] },
-        { label: '右半分・右上 (Right-Top-Right)', desc: '【右半分】の右上端にあるキー（例: Backspace や =）を右手人差し指で押してください。', target: activeCorners.right![1] },
-        { label: '右半分・右下 (Right-Bottom-Right)', desc: '【右半分】の右下端にあるキー（例: 右下Ctrl や 矢印）を右手人差し指で押してください。', target: activeCorners.right![2] },
-        { label: '右半分・左下 (Right-Bottom-Left)', desc: '【右半分】の左下端にあるキー（例: 右側Space や N）を右手人差し指で押してください。', target: activeCorners.right![3] },
-        { label: '右半分・ホーム J (Right-Home J)', desc: '【右半分】のホームポジション「J」キーを右手人差し指で押してください。', target: jTarget }
-      ];
-    }
-  }, [activeLayout, activeCorners]);
-
   const alignPointsRef = useRef(alignPoints);
   useEffect(() => {
     alignPointsRef.current = alignPoints;
   }, [alignPoints]);
-
   // MediaPipe Hand Landmark Render Loop
   useEffect(() => {
     let animationFrameId: number;
@@ -341,14 +464,14 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
           // Draw neon overlays in 'complete' phase
           if (phase === 'complete' && computedHomography) {
             ctx.save();
-            const drawQuad = (physicalPoints: Point[], color: string, cornersList: Point[]) => {
+            const drawQuad = (physicalPoints: Point[], color: string, keyCenters: Point[], outlineCorners: Point[]) => {
               try {
-                const invMatrix = computeHomography(cornersList, physicalPoints);
+                const invMatrix = computeHomography(keyCenters, physicalPoints);
                 if (invMatrix) {
-                  const tl = applyHomography(invMatrix, cornersList[0]);
-                  const tr = applyHomography(invMatrix, cornersList[1]);
-                  const br = applyHomography(invMatrix, cornersList[2]);
-                  const bl = applyHomography(invMatrix, cornersList[3]);
+                  const tl = applyHomography(invMatrix, outlineCorners[0]);
+                  const tr = applyHomography(invMatrix, outlineCorners[1]);
+                  const br = applyHomography(invMatrix, outlineCorners[2]);
+                  const bl = applyHomography(invMatrix, outlineCorners[3]);
 
                   ctx.beginPath();
                   ctx.moveTo(tl.x, tl.y);
@@ -372,11 +495,12 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
               }
             };
 
+            const targets = alignSteps.map(s => s.target);
             if (computedHomography && typeof computedHomography === 'object' && 'isSplit' in computedHomography) {
-              drawQuad(alignPointsRef.current.slice(0, 4), 'rgba(0, 173, 181, 1)', activeCorners.left);
-              drawQuad(alignPointsRef.current.slice(5, 9), 'rgba(255, 0, 127, 1)', activeCorners.right!);
+              drawQuad(alignPointsRef.current.slice(0, 4), 'rgba(0, 173, 181, 1)', targets.slice(0, 4), activeCorners.left);
+              drawQuad(alignPointsRef.current.slice(5, 9), 'rgba(255, 0, 127, 1)', targets.slice(5, 9), activeCorners.right!);
             } else {
-              drawQuad(alignPointsRef.current, 'rgba(0, 255, 204, 1)', activeCorners.left);
+              drawQuad(alignPointsRef.current, 'rgba(0, 255, 204, 1)', targets.slice(0, 4), activeCorners.left);
             }
 
             // Draw interactive point handles
@@ -414,26 +538,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
               ctx.shadowBlur = 0;
 
               // Text label
-              let label = '';
-              if (!activeLayout.isSplit) {
-                if (idx === 0) label = '左上';
-                else if (idx === 1) label = '右上';
-                else if (idx === 2) label = '右下';
-                else if (idx === 3) label = '左下';
-                else if (idx === 4) label = 'F';
-                else if (idx === 5) label = 'J';
-              } else {
-                if (idx === 0) label = '左・上左';
-                else if (idx === 1) label = '左・上右';
-                else if (idx === 2) label = '左・下右';
-                else if (idx === 3) label = '左・下左';
-                else if (idx === 4) label = '左F';
-                else if (idx === 5) label = '右・上左';
-                else if (idx === 6) label = '右・上右';
-                else if (idx === 7) label = '右・下右';
-                else if (idx === 8) label = '右・下左';
-                else if (idx === 9) label = '右J';
-              }
+              const label = alignSteps[idx]?.label || '';
 
               ctx.font = 'bold 11px Inter, sans-serif';
               const textWidth = ctx.measureText(label).width;
@@ -467,7 +572,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
       isMounted = false;
       if (animationFrameId) cancelAnimationFrame(animationFrameId);
     };
-  }, [phase, computedHomography, activeCorners, activeLayout.isSplit]);
+  }, [phase, computedHomography, activeCorners, activeLayout.isSplit, alignSteps]);
 
   // Record the point for the current step in the align phase
   const recordCurrentAlignPoint = useCallback(() => {
@@ -632,8 +737,39 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
     setDraggedPointIndex(null);
   }, []);
 
-  const handleLayoutPresetToggle = (preset: LayoutPresetId) => {
+  const handleLayoutPresetToggle = (preset: LayoutPresetId | 'custom') => {
     setPresetId(preset);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) {
+          // Validate before setting state
+          parseKLE(parsed, false);
+          setUploadedData(parsed);
+          setUploadedIsSplit(false);
+          alert("KLEレイアウト配列を読み込みました！");
+        } else if (parsed && typeof parsed === 'object' && 'layout' in parsed && Array.isArray(parsed.layout)) {
+          // Validate before setting state
+          parseLayoutJSON(text, true); // parseLayoutJSON calls parseVial under the hood
+          setUploadedData(parsed);
+          setUploadedIsSplit(true);
+          alert("Vialキーマップを読み込みました！ (スプリット配列自動設定)");
+        } else {
+          alert("不明なレイアウト形式です。KLE配列またはVialのバックアップJSONを選択してください。");
+        }
+      } catch (err) {
+        alert("JSONファイルの読み込みに失敗しました。\n" + (err instanceof Error ? err.message : String(err)));
+      }
+    };
+    reader.readAsText(file);
   };
 
   return (
@@ -703,17 +839,35 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
                   </span>
                 ))}
               </div>
+              <button 
+                onClick={() => setPhase('detectionConfirm')}
+                style={{
+                  width: '100%',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  color: '#ccc',
+                  padding: '0.7rem',
+                  borderRadius: '50px',
+                  fontWeight: 'bold',
+                  fontSize: '0.9rem',
+                  cursor: 'pointer',
+                  marginTop: '2rem',
+                  transition: 'background 0.2s'
+                }}
+              >
+                判定をスキップして配列手動選択へ
+              </button>
             </div>
           )}
 
           {phase === 'detectionConfirm' && (
             <div>
               <div style={{ textTransform: 'uppercase', fontSize: '0.8rem', color: '#00adb5', fontWeight: 600, letterSpacing: '1px', marginBottom: '0.5rem' }}>
-                Step 1: 自動判定完了
+                Step 1: 配列の確認・選択
               </div>
               <h2 style={{ fontSize: '1.4rem', margin: '0 0 1rem 0', fontWeight: 400 }}>配列の確認・選択</h2>
               <p style={{ color: '#aaa', fontSize: '0.95rem', margin: '0 0 1.5rem 0' }}>
-                検出された配列を基に設定しました。お使いのキーボードに合わせて変更も可能です。
+                配列を選択してください。カスタムJSONファイルを読み込んで使用することも可能です。
               </p>
               
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem', marginBottom: '1.5rem' }}>
@@ -737,10 +891,68 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
                     {LAYOUT_PRESETS[presetKey as keyof typeof LAYOUT_PRESETS].name}
                   </button>
                 ))}
+                <button
+                  onClick={() => handleLayoutPresetToggle('custom')}
+                  style={{
+                    padding: '0.8rem 0.5rem',
+                    background: presetId === 'custom' ? 'rgba(0, 173, 181, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                    border: '1px solid',
+                    borderColor: presetId === 'custom' ? '#00adb5' : 'rgba(255, 255, 255, 0.1)',
+                    color: presetId === 'custom' ? '#00adb5' : '#aaa',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '0.9rem',
+                    fontWeight: presetId === 'custom' ? 'bold' : 'normal',
+                    transition: 'all 0.2s',
+                    gridColumn: '1 / -1'
+                  }}
+                >
+                  カスタム配列 (JSONファイル読込)
+                </button>
               </div>
 
+              {presetId === 'custom' && (
+                <div style={{
+                  background: 'rgba(255,255,255,0.02)',
+                  border: '1px dashed rgba(255, 255, 255, 0.15)',
+                  borderRadius: '12px',
+                  padding: '1rem',
+                  marginBottom: '1.5rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.8rem'
+                }}>
+                  <div style={{ fontSize: '0.85rem', color: '#ccc' }}>KLE / Vial のJSONファイルを選択:</div>
+                  <input 
+                    type="file" 
+                    accept=".json" 
+                    onChange={handleFileUpload}
+                    style={{ fontSize: '0.85rem', color: '#aaa', width: '100%' }}
+                  />
+                  {(!uploadedData || Array.isArray(uploadedData)) && (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: '#aaa', cursor: 'pointer', userSelect: 'none' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={uploadedIsSplit} 
+                        onChange={(e) => setUploadedIsSplit(e.target.checked)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      スプリット配列 (左右分割キーボード)
+                    </label>
+                  )}
+                </div>
+              )}
+
               <button 
-                onClick={() => handlePhysicalKeyPress({ key: 'Enter', preventDefault: () => {} } as KeyboardEvent)}
+                onClick={() => {
+                  if (presetId === 'custom' && !uploadedData) {
+                    alert("先にJSONファイルを読み込んでください。");
+                    return;
+                  }
+                  setPhase('align');
+                  setAlignStepIndex(0);
+                  setAlignPoints([]);
+                }}
                 style={{
                   width: '100%',
                   background: 'linear-gradient(135deg, #00adb5, #007a82)',
@@ -754,7 +966,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
                   boxShadow: '0 4px 15px rgba(0, 173, 181, 0.4)'
                 }}
               >
-                この配列で決定して四隅調整へ (Enter)
+                決定してキー位置調整へ
               </button>
             </div>
           )}
@@ -762,9 +974,9 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
           {phase === 'align' && (
             <div>
               <div style={{ textTransform: 'uppercase', fontSize: '0.8rem', color: '#ff007f', fontWeight: 600, letterSpacing: '1px', marginBottom: '0.5rem' }}>
-                Step 2: 四隅の調整 ({alignStepIndex + 1} / {alignSteps.length})
+                Step 2: キー位置の調整 ({alignStepIndex + 1} / {alignSteps.length})
               </div>
-              <h2 style={{ fontSize: '1.4rem', margin: '0 0 1rem 0', fontWeight: 400 }}>キーボードの角をタップ</h2>
+              <h2 style={{ fontSize: '1.4rem', margin: '0 0 1rem 0', fontWeight: 400 }}>キーのタップ</h2>
               <p style={{ color: '#ccc', lineHeight: '1.6', fontSize: '1.05rem', margin: '0 0 1rem 0' }}>
                 {alignSteps[alignStepIndex]?.desc}
               </p>
@@ -819,7 +1031,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
               </div>
               <h2 style={{ fontSize: '1.4rem', margin: '0 0 1rem 0', fontWeight: 400, color: '#00ffcc' }}>調整完了！</h2>
               <p style={{ color: '#aaa', fontSize: '0.95rem', lineHeight: '1.5', margin: '0 0 1.5rem 0' }}>
-                カメラに緑・ピンクのガイド枠が表示されました。
+                ガイド枠が物理キーの位置に重なりました。
                 キーを押したとき、下の仮想キーボードにポインター（水色の円）が正しく追従するかテストしてください。
               </p>
               
@@ -827,7 +1039,12 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({ onComplete
                 <button 
                   onClick={() => {
                     if (computedHomography) {
-                      onComplete(presetId, computedHomography);
+                      onComplete(
+                        presetId, 
+                        computedHomography,
+                        presetId === 'custom' && uploadedData ? uploadedData : undefined,
+                        presetId === 'custom' ? uploadedIsSplit : undefined
+                      );
                     }
                   }}
                   style={{
