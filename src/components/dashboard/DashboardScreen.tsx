@@ -11,20 +11,24 @@ import '../../styles/dashboard.css';
 interface DashboardScreenProps {
   layout: KeyboardLayout;
   initialUnanalyzedData?: UnanalyzedSessionData | null;
+  initialAnalyzedData?: SessionData | null;
 }
 
-export const DashboardScreen: React.FC<DashboardScreenProps> = ({ layout, initialUnanalyzedData }) => {
-  const [sessionData, setSessionData] = useState<SessionData | null>(null);
+export const DashboardScreen: React.FC<DashboardScreenProps> = ({ layout, initialUnanalyzedData, initialAnalyzedData }) => {
+  const [sessionData, setSessionData] = useState<SessionData | null>(initialAnalyzedData || null);
   const [unanalyzedData, setUnanalyzedData] = useState<UnanalyzedSessionData | null>(initialUnanalyzedData || null);
   const [error, setError] = useState<string | null>(null);
 
   const [prevInitialData, setPrevInitialData] = useState(initialUnanalyzedData);
+  const [prevAnalyzedData, setPrevAnalyzedData] = useState(initialAnalyzedData);
 
-  if (initialUnanalyzedData !== prevInitialData) {
+  if (initialUnanalyzedData !== prevInitialData || initialAnalyzedData !== prevAnalyzedData) {
     setUnanalyzedData(initialUnanalyzedData || null);
-    setSessionData(null);
+    setSessionData(initialAnalyzedData || null);
     setPrevInitialData(initialUnanalyzedData);
+    setPrevAnalyzedData(initialAnalyzedData);
   }
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -49,11 +53,39 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ layout, initia
     reader.readAsText(file);
   };
 
+  const handleExportJSON = () => {
+    if (!sessionData) return;
+    const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
+      JSON.stringify(sessionData, null, 2)
+    )}`;
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', jsonString);
+    downloadAnchor.setAttribute('download', `spartan-session-${Date.now()}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
   return (
     <div className="dashboard-container">
       <div className="dashboard-header">
         <h2>Session Analysis Dashboard</h2>
-        <div className="upload-section">
+        <div className="upload-section" style={{ display: 'flex', gap: '1rem' }}>
+          {sessionData && (
+            <button 
+              onClick={handleExportJSON}
+              className="upload-btn"
+              style={{ 
+                background: 'linear-gradient(135deg, #00ffcc, #00adb5)', 
+                color: '#111', 
+                fontWeight: 'bold',
+                border: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              Export Session JSON
+            </button>
+          )}
           <label className="upload-btn">
             Load Session JSON
             <input 

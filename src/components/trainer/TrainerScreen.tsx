@@ -3,7 +3,8 @@ import { VirtualKeyboard } from '../common/VirtualKeyboard';
 import type { KeyboardLayout } from '../../types/kle';
 import { useWebcam } from '../../hooks/useWebcam';
 import { TypingEngine } from '../../utils/TypingEngine';
-import type { UnanalyzedSessionData } from '../../utils/TypingEngine';
+import type { UnanalyzedSessionData, FrameLog } from '../../utils/TypingEngine';
+import { useWorker } from '../../hooks/useWorker';
 import { getFlatPracticeList } from '../../utils/plantDictionary';
 import '../../styles/cameraPreview.css';
 import type { CalibrationHomography } from '../../utils/calibrationStorage';
@@ -28,6 +29,27 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const sessionStartRef = useRef(0);
+
+  // Analysis mode: offline (record and analyze) vs realtime (capture at keypress)
+  const [analysisMode, setAnalysisMode] = useState<'offline' | 'realtime'>(() => {
+    const saved = localStorage.getItem('spartan_analysis_mode');
+    return (saved === 'realtime') ? 'realtime' : 'offline';
+  });
+
+  const handleSetAnalysisMode = (mode: 'offline' | 'realtime') => {
+    setAnalysisMode(mode);
+    localStorage.setItem('spartan_analysis_mode', mode);
+  };
+
+  // Real-time worker and feedback
+  const { worker, isWorkerReady } = useWorker();
+  interface RealtimeFeedback {
+    key: string;
+    isCorrect: boolean;
+    expected: string;
+    got: string;
+  }
+  const [realtimeFeedback, setRealtimeFeedback] = useState<RealtimeFeedback | null>(null);
 
   // Typing practice states based on Plant Dictionary
   const practiceList = useMemo(() => getFlatPracticeList(), []);
@@ -65,8 +87,19 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
           setTimeout(() => setFlashError(false), 150);
         }
       }
+
+      // Capture frame immediately for real-time mode
+      if (analysisMode === 'realtime' && isWorkerReady && worker && videoRef.current) {
+        const video = videoRef.current;
+        if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+          createImageBitmap(video).then(bitmap => {
+            const timestamp = performance.now() - sessionStartRef.current;
+            worker.postMessage({ type: 'DETECT', image: bitmap, timestamp }, [bitmap]);
+          }).catch(err => console.error("Realtime frame capture failed:", err));
+        }
+      }
     }
-  }, [practiceList, currentWordIndex, currentCharIndex]);
+  }, [practiceList, currentWordIndex, currentCharIndex, analysisMode, isWorkerReady, worker]);
 
   useEffect(() => {
     handleKeyPressRef.current = handleKeyPress;
@@ -83,6 +116,71 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
     };
   }, [homography, layout]);
 
+  // Handle worker responses in real-time mode
+  useEffect(() => {
+    if (analysisMode !== 'realtime' || !worker || !isWorkerReady) return;
+
+    const handleWorkerMessage = (e: MessageEvent) => {
+      if (e.data.type === 'DETECT_RESULT') {
+        const { results, timestamp } = e.data;
+        if (!engineRef.current) return;
+
+        // Map results to HandData format
+        const handsData = results && results.landmarks ? results.landmarks.map((landmarks: { x: number; y: number; z: number }[], index: number) => {
+          const catName = results.handednesses?.[index]?.[0]?.categoryName;
+          const handedness: 'Left' | 'Right' = (catName === 'Left' || catName === 'Right')
+            ? catName
+            : (landmarks[0].x < 0.5 ? 'Right' : 'Left');
+          return { landmarks, handedness };
+        }) : [];
+
+        // Map to layout coordinates and process frame
+        const video = videoRef.current;
+        const videoWidth = video?.videoWidth || 640;
+        const videoHeight = video?.videoHeight || 480;
+        engineRef.current.processFrame(handsData, timestamp, videoWidth, videoHeight);
+
+        // Find the corresponding keystroke and analyze it
+        const keystrokes = engineRef.current.getRawKeystrokes();
+        const match = keystrokes.find(ks => Math.abs(ks.timestamp - timestamp) < 100);
+        
+        if (match) {
+          // Get the frame we just appended
+          const framesList = engineRef.current.getFrames();
+          const addedFrame = framesList ? framesList.find((f: FrameLog) => f.timestamp === timestamp) : null;
+          
+          if (addedFrame) {
+            const analysis = engineRef.current.analyzeKeystrokeRealtime(match, addedFrame);
+            
+            const translateFinger = (f: string | string[]) => {
+              const map: Record<string, string> = {
+                LeftPinky: '左手小指', LeftRing: '左手薬指', LeftMiddle: '左手中指', LeftIndex: '左手人差し指', LeftThumb: '左手親指',
+                RightThumb: '右手親指', RightIndex: '右手人差し指', RightMiddle: '右手中指', RightRing: '右手薬指', RightPinky: '右手小指',
+                Unknown: '不明'
+              };
+              if (Array.isArray(f)) {
+                return f.map(x => map[x] || x).join(' または ');
+              }
+              return map[f] || f;
+            };
+
+            setRealtimeFeedback({
+              key: match.key,
+              isCorrect: !!analysis.isCorrectFinger,
+              expected: translateFinger(analysis.expectedFinger),
+              got: translateFinger(analysis.predictedFinger)
+            });
+          }
+        }
+      }
+    };
+
+    worker.addEventListener('message', handleWorkerMessage);
+    return () => {
+      worker.removeEventListener('message', handleWorkerMessage);
+    };
+  }, [analysisMode, worker, isWorkerReady]);
+
   // 60fps main thread Hand Tracker Loop is removed to guarantee zero-latency.
   // Video capturing is handled directly via MediaRecorder.
 
@@ -92,6 +190,14 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
     if (isRecording) {
       engineRef.current.stopSession();
       setIsRecording(false);
+      
+      if (analysisMode === 'realtime') {
+        if (onSessionComplete) {
+          const finalJson = engineRef.current.exportSession();
+          onSessionComplete(JSON.parse(finalJson));
+        }
+        return;
+      }
       
       const finalizeSession = (blob: Blob | null) => {
         if (onSessionComplete) {
@@ -114,7 +220,9 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
       }
       
     } else {
-      if (stream) {
+      setRealtimeFeedback(null);
+      
+      if (analysisMode === 'offline' && stream) {
         recordedChunksRef.current = [];
         try {
           const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8' });
@@ -187,6 +295,29 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
                 {practiceList[currentWordIndex]?.node.romaji.slice(currentCharIndex + 1)}
               </span>
             </div>
+            {realtimeFeedback && (
+              <div 
+                style={{ 
+                  marginTop: '1rem', 
+                  padding: '0.5rem 1rem',
+                  borderRadius: '8px',
+                  background: realtimeFeedback.isCorrect ? 'rgba(0, 255, 204, 0.1)' : 'rgba(255, 77, 77, 0.1)',
+                  border: realtimeFeedback.isCorrect ? '1px solid rgba(0, 255, 204, 0.3)' : '1px solid rgba(255, 77, 77, 0.3)',
+                  color: realtimeFeedback.isCorrect ? '#00ffcc' : '#ff4d4d',
+                  fontSize: '0.85rem',
+                  fontWeight: 'bold',
+                  display: 'inline-block'
+                }}
+              >
+                {realtimeFeedback.isCorrect ? (
+                  <span>✓ 正しい指使いです！ ({realtimeFeedback.got})</span>
+                ) : (
+                  <span>
+                    ✗ 違います！ (想定: {realtimeFeedback.expected} → 検出: {realtimeFeedback.got})
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -211,7 +342,7 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
           border: '1px solid rgba(255,255,255,0.08)',
           borderRadius: '16px',
           padding: '1.5rem',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -222,6 +353,57 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
               ✓ キャリブレーション有効
             </div>
           )}
+
+          {/* Mode Selector */}
+          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.2rem' }}>
+            <label style={{ fontSize: '0.75rem', color: '#888', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px', textAlign: 'left', width: '100%' }}>
+              解析モード
+            </label>
+            <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', padding: '3px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', width: '100%', boxSizing: 'border-box' }}>
+              <button
+                disabled={isRecording}
+                onClick={() => handleSetAnalysisMode('offline')}
+                style={{
+                  flex: 1,
+                  padding: '0.4rem',
+                  background: analysisMode === 'offline' ? 'linear-gradient(135deg, #00adb5, #007a82)' : 'transparent',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: isRecording ? 'not-allowed' : 'pointer',
+                  fontSize: '0.7rem',
+                  fontWeight: 'bold',
+                  transition: 'all 0.2s'
+                }}
+              >
+                🎥 録画後解析
+              </button>
+              <button
+                disabled={isRecording}
+                onClick={() => handleSetAnalysisMode('realtime')}
+                style={{
+                  flex: 1,
+                  padding: '0.4rem',
+                  background: analysisMode === 'realtime' ? 'linear-gradient(135deg, #00adb5, #007a82)' : 'transparent',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: isRecording ? 'not-allowed' : 'pointer',
+                  fontSize: '0.7rem',
+                  fontWeight: 'bold',
+                  transition: 'all 0.2s'
+                }}
+              >
+                ⚡️ 打鍵時即時
+              </button>
+            </div>
+            {!isWorkerReady && analysisMode === 'realtime' && (
+              <div style={{ fontSize: '11px', color: '#ffcc00', textAlign: 'center', marginTop: '2px' }}>
+                ⚠️ AIモデル起動中...
+              </div>
+            )}
+          </div>
+
           <button 
             onClick={toggleRecording}
             style={{

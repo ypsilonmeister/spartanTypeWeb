@@ -100,6 +100,10 @@ export class TypingEngine {
     return this.keystrokes;
   }
 
+  public getFrames(): FrameLog[] {
+    return this.frames;
+  }
+
   public loadKeystrokes(keystrokes: KeystrokeLog[]) {
     this.keystrokes = keystrokes;
   }
@@ -193,6 +197,70 @@ export class TypingEngine {
       keystrokes: enrichedKeystrokes,
     };
     return JSON.stringify(data, null, 2);
+  }
+
+  /**
+   * Performs real-time proximity calculation for a single keystroke and hand landmarks frame.
+   */
+  public analyzeKeystrokeRealtime(
+    keystroke: KeystrokeLog,
+    frame: FrameLog
+  ): {
+    predictedFinger: string;
+    expectedFinger: string | string[];
+    isCorrectFinger?: boolean;
+    distanceU: number;
+  } {
+    const targetKey = this.findTargetKey(keystroke.code);
+    if (!targetKey) {
+      return {
+        predictedFinger: 'Unknown',
+        expectedFinger: expectedFingerMap[keystroke.code] || 'Unknown',
+        distanceU: Infinity
+      };
+    }
+
+    const keyCenter = {
+      x: targetKey.x + targetKey.w / 2,
+      y: targetKey.y + targetKey.h / 2
+    };
+
+    let bestFinger = '';
+    let minDistance = Infinity;
+
+    // Find the closest mapped finger tip across all 10 fingers
+    for (const [fingerName, mappedTip] of Object.entries(frame.mappedTips)) {
+      const dist = Math.hypot(mappedTip.x - keyCenter.x, mappedTip.y - keyCenter.y);
+      if (dist < minDistance) {
+        minDistance = dist;
+        bestFinger = fingerName;
+      }
+    }
+
+    const expectedFinger = expectedFingerMap[keystroke.code] || 'Unknown';
+
+    // If no fingers mapped or distance is way too far (e.g. hands out of keyboard area)
+    if (minDistance > 1.5) {
+      return {
+        predictedFinger: bestFinger || 'Unknown',
+        expectedFinger,
+        distanceU: minDistance
+      };
+    }
+
+    let isCorrect: boolean;
+    if (Array.isArray(expectedFinger)) {
+      isCorrect = expectedFinger.includes(bestFinger);
+    } else {
+      isCorrect = expectedFinger === bestFinger;
+    }
+
+    return {
+      predictedFinger: bestFinger,
+      expectedFinger,
+      isCorrectFinger: isCorrect,
+      distanceU: minDistance
+    };
   }
 
   /**

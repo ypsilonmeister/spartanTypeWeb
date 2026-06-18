@@ -3,7 +3,7 @@ import { parseKLE, parseLayoutJSON } from './utils/kleParser';
 import { TrainerScreen } from './components/trainer/TrainerScreen';
 import { CalibrationScreen } from './components/calibration/CalibrationScreen';
 import { DashboardScreen } from './components/dashboard/DashboardScreen';
-import type { UnanalyzedSessionData } from './utils/TypingEngine';
+import type { UnanalyzedSessionData, SessionData } from './utils/TypingEngine';
 import { loadCalibration, saveCalibration } from './utils/calibrationStorage';
 import type { CalibrationHomography } from './utils/calibrationStorage';
 import { LAYOUT_PRESETS } from './assets/layoutTemplates';
@@ -15,6 +15,7 @@ function App() {
   const [homography, setHomography] = useState<CalibrationHomography | null>(savedConfig ? savedConfig.homography : null);
   const [mode, setMode] = useState<'calibration' | 'trainer' | 'dashboard'>(savedConfig ? 'trainer' : 'calibration');
   const [unanalyzedData, setUnanalyzedData] = useState<UnanalyzedSessionData | null>(null);
+  const [analyzedData, setAnalyzedData] = useState<SessionData | null>(null);
   
   const [customLayoutData, setCustomLayoutData] = useState<unknown | null>(savedConfig?.customLayoutData || null);
   const [customLayoutIsSplit, setCustomLayoutIsSplit] = useState<boolean>(savedConfig?.customLayoutIsSplit || false);
@@ -47,11 +48,19 @@ function App() {
     if (customData !== undefined) setCustomLayoutData(customData);
     if (customIsSplit !== undefined) setCustomLayoutIsSplit(customIsSplit);
     setHomography(calibration);
+    setUnanalyzedData(null);
+    setAnalyzedData(null);
     setMode('trainer');
   };
 
-  const handleSessionComplete = (data: UnanalyzedSessionData) => {
-    setUnanalyzedData(data);
+  const handleSessionComplete = (data: UnanalyzedSessionData | SessionData) => {
+    if ('frames' in data) {
+      setAnalyzedData(data);
+      setUnanalyzedData(null);
+    } else {
+      setUnanalyzedData(data);
+      setAnalyzedData(null);
+    }
     setMode('dashboard');
   };
 
@@ -72,7 +81,11 @@ function App() {
         <h1 style={{ margin: 0, fontWeight: 300, letterSpacing: '2px', fontSize: '1.5rem' }}>SpartanType Web</h1>
         <div style={{ display: 'flex', gap: '0.5rem', background: '#222', padding: '0.25rem', borderRadius: '8px' }}>
           <button 
-            onClick={() => setMode('calibration')}
+            onClick={() => {
+              setUnanalyzedData(null);
+              setAnalyzedData(null);
+              setMode('calibration');
+            }}
             style={{ 
               padding: '0.5rem 1.5rem', 
               background: mode === 'calibration' ? '#00adb5' : 'transparent', 
@@ -87,7 +100,13 @@ function App() {
             Calibration
           </button>
           <button 
-            onClick={() => { if(homography) setMode('trainer') }}
+            onClick={() => { 
+              if (homography) {
+                setUnanalyzedData(null);
+                setAnalyzedData(null);
+                setMode('trainer');
+              } 
+            }}
             disabled={!homography}
             style={{ 
               padding: '0.5rem 1.5rem', 
@@ -137,7 +156,11 @@ function App() {
       )}
 
       {mode === 'dashboard' && (
-        <DashboardScreen layout={layout} initialUnanalyzedData={unanalyzedData} />
+        <DashboardScreen 
+          layout={layout} 
+          initialUnanalyzedData={unanalyzedData} 
+          initialAnalyzedData={analyzedData} 
+        />
       )}
     </div>
   );
