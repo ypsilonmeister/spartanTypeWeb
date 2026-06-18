@@ -1,0 +1,268 @@
+/* ============================================================
+   Trainer Screen — Typing Practice Layout
+   ============================================================ */
+
+.trainer-layout {
+  display: flex;
+  gap: var(--space-xl);
+  width: 100%;
+  max-width: 1200px;
+  justify-content: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ---- Left Column ---- */
+.trainer-left-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-lg);
+  flex: 1 1 640px;
+  max-width: 720px;
+}
+
+.trainer-camera-preview {
+  width: 100%;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-card-lg);
+}
+
+.trainer-camera-video {
+  width: 100%;
+  height: auto;
+  transform: scaleX(-1);
+}
+
+/* ---- Typing Word Display ---- */
+.trainer-word-display {
+  width: 100%;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1.2rem;
+  text-align: center;
+  box-shadow: var(--shadow-card);
+  transition: var(--transition-fast);
+  box-sizing: border-box;
+}
+
+.trainer-word-display.is-error {
+  background: rgba(255, 77, 77, 0.15);
+  border: 1px solid rgba(255, 77, 77, 0.5);
+}
+
+.trainer-word-path {
+  font-size: 0.85rem;
+  color: var(--color-accent);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-bottom: 0.4rem;
+}
+
+.trainer-word-japanese {
+  font-size: 1.4rem;
+  font-weight: 400;
+  color: var(--color-text);
+  margin-bottom: 0.8rem;
+}
+
+.trainer-word-romaji {
+  font-size: 2rem;
+  font-family: var(--font-mono);
+  font-weight: bold;
+  letter-spacing: 4px;
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.trainer-romaji-typed {
+  color: #888;
+}
+
+.trainer-romaji-current {
+  color: var(--color-success);
+  border-bottom: 3px solid var(--color-success);
+  padding-bottom: 2px;
+}
+
+.trainer-romaji-remaining {
+  color: var(--color-text);
+}
+
+.trainer-realtime-feedback {
+  margin-top: var(--space-md);
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: bold;
+  display: inline-block;
+}
+
+.trainer-realtime-feedback.is-correct {
+  background: rgba(0, 255, 204, 0.1);
+  border: 1px solid var(--color-success-glow);
+  color: var(--color-success);
+}
+
+.trainer-realtime-feedback.is-incorrect {
+  background: rgba(255, 77, 77, 0.1);
+  border: 1px solid rgba(255, 77, 77, 0.3);
+  color: var(--color-error);
+}
+
+.trainer-keyboard-wrapper {
+  position: relative;
+  background: rgba(0, 0, 0, 0.2);
+  padding: var(--space-md);
+  border-radius: var(--radius-lg);
+}
+
+/* ---- Right Column ---- */
+.trainer-right-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-lg);
+  width: 340px;
+}
+
+.trainer-control-panel {
+  width: 100%;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.trainer-calibration-status {
+  width: 100%;
+  text-align: center;
+  padding: var(--space-sm);
+  background: rgba(0, 255, 0, 0.1);
+  color: #0f0;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(0, 255, 0, 0.2);
+  font-size: 0.9rem;
+}
+
+/* ---- Mode Selector ---- */
+.trainer-mode-selector {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-bottom: 0.2rem;
+}
+
+.trainer-mode-label {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  text-align: left;
+  width: 100%;
+}
+
+.trainer-mode-toggle {
+  display: flex;
+  background: var(--color-surface-2);
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.trainer-mode-btn {
+  flex: 1;
+  padding: 0.4rem;
+  background: transparent;
+  color: var(--color-text);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: bold;
+  transition: var(--transition-std);
+}
+
+.trainer-mode-btn.is-active {
+  background: linear-gradient(135deg, var(--color-accent), var(--color-accent-dark));
+}
+
+.trainer-mode-btn:disabled {
+  cursor: not-allowed;
+}
+
+.trainer-model-loading {
+  font-size: 11px;
+  color: var(--color-warning);
+  text-align: center;
+  margin-top: 2px;
+}
+
+/* ---- Record Toggle Button ---- */
+.trainer-record-btn {
+  width: 100%;
+  padding: var(--space-md);
+  color: var(--color-text);
+  border: none;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 1.1rem;
+  transition: var(--transition-std);
+  background: linear-gradient(135deg, var(--color-accent), var(--color-accent-dark));
+  box-shadow: var(--shadow-accent);
+}
+
+.trainer-record-btn.is-recording {
+  background: linear-gradient(135deg, var(--color-error), #cc0000);
+  box-shadow: 0 4px 15px rgba(255, 77, 77, 0.4);
+}
+
+.trainer-record-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.trainer-recording-hint {
+  font-size: 13px;
+  color: #aaa;
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* ---- Tree Placeholder Panel ---- */
+.trainer-tree-panel {
+  flex: 1;
+  width: 100%;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.trainer-tree-icon {
+  font-size: 2rem;
+  display: block;
+  margin-bottom: var(--space-sm);
+}

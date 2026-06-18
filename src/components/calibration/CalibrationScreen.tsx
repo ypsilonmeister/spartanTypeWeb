@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useWebcam } from '../../hooks/useWebcam';
 import { HandTracker } from '../../utils/handTracker';
 import { DrawingUtils, HandLandmarker } from '@mediapipe/tasks-vision';
+import type { NormalizedLandmark } from '@mediapipe/tasks-vision';
 import { parseKLE, parseLayoutJSON } from '../../utils/kleParser';
 import type { KeyboardLayout, Key } from '../../types/kle';
 import { VirtualKeyboard } from '../common/VirtualKeyboard';
@@ -195,6 +196,37 @@ function getCalibrationKeys(layout: KeyboardLayout): CalibrationTarget[] {
   }
 }
 
+/**
+ * alignPoints / alignSteps 配列内での各ポイントの役割（インデックス）を一元定義する。
+ * getCalibrationKeys() が生成するステップ順と必ず一致させること。
+ *
+ * - 非スプリット (6点): [0..3]=四隅(TL,TR,BR,BL), 4=左ホーム(F), 5=右ホーム(J)
+ * - スプリット (10点): [0..3]=左半四隅, 4=左ホーム(F), [5..8]=右半四隅, 9=右ホーム(J)
+ *
+ * computeHomography / homePointers / オーバーレイ描画など複数箇所がこの並びに
+ * 依存していたため、ここを単一の真実の源 (single source of truth) とする。
+ */
+const CALIBRATION_INDICES = {
+  single: {
+    expectedCount: 6,
+    corners: [0, 1, 2, 3] as const,
+    leftHome: 4,
+    rightHome: 5,
+  },
+  split: {
+    expectedCount: 10,
+    leftCorners: [0, 1, 2, 3] as const,
+    leftHome: 4,
+    rightCorners: [5, 6, 7, 8] as const,
+    rightHome: 9,
+  },
+} as const;
+
+/** alignPoints から、指定インデックス群の点を取り出す。 */
+function pickPoints(points: Point[], indices: readonly number[]): Point[] {
+  return indices.map((i) => points[i]);
+}
+
 function findClosestKeyIndex(layout: KeyboardLayout, target: Point): number {
   let minDistance = Infinity;
   let closestIndex = -1;
@@ -269,22 +301,21 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
 
   // Homography calculations (derived from alignPoints during 'complete' phase)
   const computedHomography = useMemo<CalibrationHomography | null>(() => {
-    if (phase !== 'complete' || alignPoints.length < (activeLayout.isSplit ? 10 : 6)) {
+    const cfg = activeLayout.isSplit ? CALIBRATION_INDICES.split : CALIBRATION_INDICES.single;
+    if (phase !== 'complete' || alignPoints.length < cfg.expectedCount) {
       return null;
     }
 
     try {
       const targets = alignSteps.map(s => s.target);
       if (!activeLayout.isSplit) {
-        const matrix = computeHomography(alignPoints.slice(0, 4), targets.slice(0, 4));
-        return matrix;
+        const { corners } = CALIBRATION_INDICES.single;
+        return computeHomography(pickPoints(alignPoints, corners), pickPoints(targets, corners));
       } else {
-        const leftPoints = alignPoints.slice(0, 4);
-        const rightPoints = alignPoints.slice(5, 9);
-        
-        const leftMatrix = computeHomography(leftPoints, targets.slice(0, 4));
-        const rightMatrix = computeHomography(rightPoints, targets.slice(5, 9));
-        
+        const { leftCorners, rightCorners } = CALIBRATION_INDICES.split;
+        const leftMatrix = computeHomography(pickPoints(alignPoints, leftCorners), pickPoints(targets, leftCorners));
+        const rightMatrix = computeHomography(pickPoints(alignPoints, rightCorners), pickPoints(targets, rightCorners));
+
         if (leftMatrix && rightMatrix) {
           return {
             left: leftMatrix,
@@ -309,24 +340,21 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
 
   // Calibrated home position pointers
   const homePointers = useMemo<Point[]>(() => {
-    if (!computedHomography || alignPoints.length < (activeLayout.isSplit ? 10 : 6)) return [];
+    const cfg = activeLayout.isSplit ? CALIBRATION_INDICES.split : CALIBRATION_INDICES.single;
+    if (!computedHomography || alignPoints.length < cfg.expectedCount) return [];
     try {
       if ('isSplit' in computedHomography && computedHomography.isSplit) {
-        const leftMatrix = computedHomography.left;
-        const rightMatrix = computedHomography.right;
-        const leftF = alignPoints[4];
-        const rightJ = alignPoints[9];
+        const { leftHome, rightHome } = CALIBRATION_INDICES.split;
         return [
-          applyHomography(leftMatrix, leftF),
-          applyHomography(rightMatrix, rightJ)
+          applyHomography(computedHomography.left, alignPoints[leftHome]),
+          applyHomography(computedHomography.right, alignPoints[rightHome])
         ];
       } else {
         const matrix = computedHomography as HomographyMatrix;
-        const f = alignPoints[4];
-        const j = alignPoints[5];
+        const { leftHome, rightHome } = CALIBRATION_INDICES.single;
         return [
-          applyHomography(matrix, f),
-          applyHomography(matrix, j)
+          applyHomography(matrix, alignPoints[leftHome]),
+          applyHomography(matrix, alignPoints[rightHome])
         ];
       }
     } catch (e) {
@@ -410,11 +438,11 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
               const handsData = mapMediaPipeResults(results);
               for (const hand of handsData) {
                 // Draw hand skeleton with cyber glow styles
-                drawingUtils?.drawConnectors(hand.landmarks as any, HandLandmarker.HAND_CONNECTIONS, {
+                drawingUtils?.drawConnectors(hand.landmarks as NormalizedLandmark[], HandLandmarker.HAND_CONNECTIONS, {
                   color: hand.handedness === 'Left' ? '#00adb5' : '#ff007f',
                   lineWidth: 2,
                 });
-                drawingUtils?.drawLandmarks(hand.landmarks as any, {
+                drawingUtils?.drawLandmarks(hand.landmarks as NormalizedLandmark[], {
                   color: '#ffffff',
                   lineWidth: 1,
                   radius: 2,
@@ -491,20 +519,24 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
 
             const targets = alignSteps.map(s => s.target);
             if (isSplitHomography(computedHomography)) {
-              drawQuad(alignPointsRef.current.slice(0, 4), 'rgba(0, 173, 181, 1)', targets.slice(0, 4), activeCorners.left);
-              drawQuad(alignPointsRef.current.slice(5, 9), 'rgba(255, 0, 127, 1)', targets.slice(5, 9), activeCorners.right!);
+              const { leftCorners, rightCorners } = CALIBRATION_INDICES.split;
+              drawQuad(pickPoints(alignPointsRef.current, leftCorners), 'rgba(0, 173, 181, 1)', pickPoints(targets, leftCorners), activeCorners.left);
+              drawQuad(pickPoints(alignPointsRef.current, rightCorners), 'rgba(255, 0, 127, 1)', pickPoints(targets, rightCorners), activeCorners.right!);
             } else {
-              drawQuad(alignPointsRef.current, 'rgba(0, 255, 204, 1)', targets.slice(0, 4), activeCorners.left);
+              const { corners } = CALIBRATION_INDICES.single;
+              drawQuad(pickPoints(alignPointsRef.current, corners), 'rgba(0, 255, 204, 1)', pickPoints(targets, corners), activeCorners.left);
             }
 
             // Draw interactive point handles
             alignPointsRef.current.forEach((pt, idx) => {
-              const isHome = activeLayout.isSplit ? (idx === 4 || idx === 9) : (idx === 4 || idx === 5);
+              const cfg = activeLayout.isSplit ? CALIBRATION_INDICES.split : CALIBRATION_INDICES.single;
+              const isHome = idx === cfg.leftHome || idx === cfg.rightHome;
               let color = '#00adb5'; // Cyan default
               if (activeLayout.isSplit) {
-                if (idx >= 5) color = '#ff007f'; // Magenta for right half
+                // 右半分 (右四隅 + 右ホーム) はマゼンタ
+                if (idx >= CALIBRATION_INDICES.split.rightCorners[0]) color = '#ff007f';
               } else {
-                if (idx === 5) color = '#ff007f';
+                if (idx === CALIBRATION_INDICES.single.rightHome) color = '#ff007f';
               }
               if (isHome) color = '#00ff88'; // Neon green for home anchors!
 

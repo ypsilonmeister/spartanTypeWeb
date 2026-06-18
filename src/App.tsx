@@ -1,12 +1,10 @@
 import { useMemo, useState } from 'react';
-import { parseKLE } from './utils/kleParser';
 import { TrainerScreen } from './components/trainer/TrainerScreen';
 import { CalibrationScreen } from './components/calibration/CalibrationScreen';
 import { DashboardScreen } from './components/dashboard/DashboardScreen';
 import type { UnanalyzedSessionData, SessionData } from './utils/TypingEngine';
 import { loadCalibration, saveCalibration } from './utils/calibrationStorage';
 import type { CalibrationHomography } from './utils/calibrationStorage';
-import { LAYOUT_PRESETS } from './assets/layoutTemplates';
 import type { LayoutPresetId } from './assets/layoutTemplates';
 import { useKeyboardLayout } from './hooks/useKeyboardLayout';
 import './App.css';
@@ -69,13 +67,6 @@ function App() {
     }
     setMode('dashboard');
   };
-
-  // US プリセットのデフォルトレイアウト（CalibrationScreen の検出フェーズ用）
-  const defaultLayout = useMemo(
-    () => parseKLE(LAYOUT_PRESETS['us-standard'].data, false),
-    []
-  );
-  void defaultLayout; // used indirectly via LAYOUT_PRESETS
 
   return (
     <div className="app-shell">

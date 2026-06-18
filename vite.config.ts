@@ -13,6 +13,44 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
+      workbox: {
+        // MediaPipe のモデル(~10MB)と WASM は CDN から取得するため、
+        // precache せず実行時に CacheFirst でキャッシュする。
+        // 一度オンラインで読み込めば以降はオフラインでも手の検出が動作する。
+        runtimeCaching: [
+          {
+            // モデルファイル: https://storage.googleapis.com/mediapipe-models/...
+            urlPattern: /^https:\/\/storage\.googleapis\.com\/mediapipe-models\/.*/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'mediapipe-model-cache',
+              expiration: {
+                maxEntries: 8,
+                maxAgeSeconds: 60 * 60 * 24 * 90, // 90 日
+              },
+              cacheableResponse: {
+                // googleapis は CORS で opaque(0) になり得るため 0 も許可
+                statuses: [0, 200],
+              },
+            },
+          },
+          {
+            // WASM ローダー: https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@.../wasm
+            urlPattern: /^https:\/\/cdn\.jsdelivr\.net\/npm\/@mediapipe\/.*/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'mediapipe-wasm-cache',
+              expiration: {
+                maxEntries: 16,
+                maxAgeSeconds: 60 * 60 * 24 * 90, // 90 日
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
+        ],
+      },
       manifest: {
         name: 'SpartanType Web',
         short_name: 'SpartanType',

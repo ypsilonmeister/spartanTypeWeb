@@ -47,7 +47,7 @@ const FINGERS = [
 export class TypingEngine {
   private layout: KeyboardLayout;
   private homography: CalibrationHomography;
-  private onKeyPressCallback?: (code: string) => void;
+  private onKeyPressCallback?: (code: string, keystrokeIndex: number) => void;
   
   private frames: FrameLog[] = [];
   private keystrokes: KeystrokeLog[] = [];
@@ -57,19 +57,25 @@ export class TypingEngine {
   private handleKeyDown = (e: KeyboardEvent) => {
     if (e.repeat) return; // Prevent continuous logging on long press
 
-    if (this.onKeyPressCallback) {
-      this.onKeyPressCallback(e.code);
+    // 記録中はキーストロークを先に push し、その index をコールバックへ渡す。
+    // リアルタイム解析がフレームとキーストロークを timestamp 近似ではなく
+    // index で確実に対応付けられるようにするため。
+    let keystrokeIndex = -1;
+    if (this.isRecording) {
+      keystrokeIndex = this.keystrokes.length;
+      this.keystrokes.push({
+        timestamp: performance.now() - this.sessionStart,
+        key: e.key,
+        code: e.code,
+      });
     }
-    
-    if (!this.isRecording) return;
-    this.keystrokes.push({
-      timestamp: performance.now() - this.sessionStart,
-      key: e.key,
-      code: e.code,
-    });
+
+    if (this.onKeyPressCallback) {
+      this.onKeyPressCallback(e.code, keystrokeIndex);
+    }
   };
 
-  constructor(layout: KeyboardLayout, homography: CalibrationHomography, onKeyPressCallback?: (code: string) => void) {
+  constructor(layout: KeyboardLayout, homography: CalibrationHomography, onKeyPressCallback?: (code: string, keystrokeIndex: number) => void) {
     this.layout = layout;
     this.homography = homography;
     this.onKeyPressCallback = onKeyPressCallback;
@@ -88,6 +94,7 @@ export class TypingEngine {
   public startSession(startTime: number = performance.now()) {
     this.frames = [];
     this.keystrokes = [];
+    this.sortedFramesCache = null;
     this.isRecording = true;
     this.sessionStart = startTime;
   }
@@ -96,19 +103,46 @@ export class TypingEngine {
     this.isRecording = false;
   }
 
+  // exportSession() が複数キーストロークを処理する際に再利用する、
+  // timestamp 昇順ソート済みフレーム配列のキャッシュ。
+  private sortedFramesCache: FrameLog[] | null = null;
+
+  private getSortedFrames(): FrameLog[] {
+    if (!this.sortedFramesCache) {
+      // Worker 応答が非順序で届く可能性があるため明示的にソートする。
+      this.sortedFramesCache = [...this.frames].sort((a, b) => a.timestamp - b.timestamp);
+    }
+    return this.sortedFramesCache;
+  }
+
   /**
-   * タイムスタンプに最も近いフレームを検索する。
+   * タイムスタンプに最も近いフレームを二分探索で検索する。
+   * フレームは時系列順にソート済みのため O(log n) で求まる。
    * @param timestamp - 比較対象のタイムスタンプ (ms)
    * @param maxDiffMs - この値より差が大きければ null を返す (デフォルト 500ms)
    */
   private findNearestFrame(timestamp: number, maxDiffMs = 500): FrameLog | null {
+    const frames = this.getSortedFrames();
+    if (frames.length === 0) return null;
+
+    // timestamp 以上となる最初の要素を二分探索 (lower bound)
+    let lo = 0;
+    let hi = frames.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (frames[mid].timestamp < timestamp) lo = mid + 1;
+      else hi = mid;
+    }
+
+    // 候補は lo (>= timestamp 側) と lo-1 (< timestamp 側) の2つ
     let nearestFrame: FrameLog | null = null;
     let minTimeDiff = Infinity;
-    for (const frame of this.frames) {
-      const diff = Math.abs(frame.timestamp - timestamp);
+    for (const idx of [lo - 1, lo]) {
+      if (idx < 0 || idx >= frames.length) continue;
+      const diff = Math.abs(frames[idx].timestamp - timestamp);
       if (diff < minTimeDiff) {
         minTimeDiff = diff;
-        nearestFrame = frame;
+        nearestFrame = frames[idx];
       }
     }
     return nearestFrame !== null && minTimeDiff <= maxDiffMs ? nearestFrame : null;
@@ -116,6 +150,10 @@ export class TypingEngine {
 
   public getRawKeystrokes(): KeystrokeLog[] {
     return this.keystrokes;
+  }
+
+  public getKeystrokeByIndex(index: number): KeystrokeLog | null {
+    return this.keystrokes[index] ?? null;
   }
 
   public getFrames(): FrameLog[] {
@@ -314,6 +352,7 @@ export class TypingEngine {
         timestamp,
         mappedTips: mappedTips
       });
+      this.sortedFramesCache = null; // フレーム追加でソート済みキャッシュを無効化
     }
 
     return uiPointers;

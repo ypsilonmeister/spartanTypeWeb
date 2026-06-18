@@ -8,6 +8,7 @@ import { useWorker } from '../../hooks/useWorker';
 import { getFlatPracticeList } from '../../utils/plantDictionary';
 import { mapMediaPipeResults } from '../../utils/mediapipeUtils';
 import '../../styles/cameraPreview.css';
+import '../../styles/trainer.css';
 import type { CalibrationHomography } from '../../utils/calibrationStorage';
 
 interface TrainerScreenProps {
@@ -18,7 +19,7 @@ interface TrainerScreenProps {
 
 export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography, onSessionComplete }) => {
   const engineRef = useRef<TypingEngine | null>(null);
-  const handleKeyPressRef = useRef<(code: string) => void>(() => {});
+  const handleKeyPressRef = useRef<(code: string, keystrokeIndex: number) => void>(() => {});
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const { error: webcamError, stream } = useWebcam(videoRef);
@@ -58,7 +59,7 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
   const [flashError, setFlashError] = useState(false);
 
-  const handleKeyPress = useCallback((code: string) => {
+  const handleKeyPress = useCallback((code: string, keystrokeIndex: number) => {
     setPressedKeyCode(code);
     setTimeout(() => {
       setPressedKeyCode(null);
@@ -89,13 +90,14 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
         }
       }
 
-      // Capture frame immediately for real-time mode
-      if (analysisMode === 'realtime' && isWorkerReady && worker && videoRef.current) {
+      // Capture frame immediately for real-time mode.
+      // keystrokeIndex を worker へ渡し、応答を発火元キーストロークへ確実に紐付ける。
+      if (analysisMode === 'realtime' && keystrokeIndex >= 0 && isWorkerReady && worker && videoRef.current) {
         const video = videoRef.current;
         if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
           createImageBitmap(video).then(bitmap => {
             const timestamp = performance.now() - sessionStartRef.current;
-            worker.postMessage({ type: 'DETECT', image: bitmap, timestamp }, [bitmap]);
+            worker.postMessage({ type: 'DETECT', image: bitmap, timestamp, keystrokeIndex }, [bitmap]);
           }).catch(err => console.error("Realtime frame capture failed:", err));
         }
       }
@@ -108,7 +110,7 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
   
   useEffect(() => {
     if (homography) {
-      engineRef.current = new TypingEngine(layout, homography, (code) => handleKeyPressRef.current(code));
+      engineRef.current = new TypingEngine(layout, homography, (code, idx) => handleKeyPressRef.current(code, idx));
     }
     return () => {
       if (engineRef.current) {
@@ -123,7 +125,7 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
 
     const handleWorkerMessage = (e: MessageEvent) => {
       if (e.data.type === 'DETECT_RESULT') {
-        const { results, timestamp } = e.data;
+        const { results, timestamp, keystrokeIndex } = e.data;
         if (!engineRef.current) return;
 
         // Map results to HandData format using shared utility
@@ -135,18 +137,21 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
         const videoHeight = video?.videoHeight || 480;
         engineRef.current.processFrame(handsData, timestamp, videoWidth, videoHeight);
 
-        // Find the corresponding keystroke and analyze it
-        const keystrokes = engineRef.current.getRawKeystrokes();
-        const match = keystrokes.find(ks => Math.abs(ks.timestamp - timestamp) < 100);
-        
+        // keystrokeIndex で発火元キーストロークを確実に取得 (timestamp 近似に頼らない)
+        const match = typeof keystrokeIndex === 'number'
+          ? engineRef.current.getKeystrokeByIndex(keystrokeIndex)
+          : null;
+
         if (match) {
-          // Get the frame we just appended
+          // Get the frame we just appended (processFrame pushes synchronously to the tail)
           const framesList = engineRef.current.getFrames();
-          const addedFrame = framesList ? framesList.find((f: FrameLog) => f.timestamp === timestamp) : null;
-          
+          const addedFrame: FrameLog | null = framesList.length > 0
+            ? framesList[framesList.length - 1]
+            : null;
+
           if (addedFrame) {
             const analysis = engineRef.current.analyzeKeystrokeRealtime(match, addedFrame);
-            
+
             const translateFinger = (f: string | string[]) => {
               const map: Record<string, string> = {
                 LeftPinky: '左手小指', LeftRing: '左手薬指', LeftMiddle: '左手中指', LeftIndex: '左手人差し指', LeftThumb: '左手親指',
@@ -240,69 +245,43 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
   };
 
   return (
-    <div style={{ display: 'flex', gap: '2rem', width: '100%', maxWidth: '1200px', justifyContent: 'center', alignItems: 'flex-start', flexWrap: 'wrap', overflow: 'hidden', flex: 1, minHeight: 0 }}>
-      
+    <div className="trainer-layout">
+
       {/* Left Column: Camera Video & Virtual Keyboard */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem', flex: '1 1 640px', maxWidth: '720px' }}>
-        <div className="camera-preview-container" style={{ width: '100%', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)' }}>
+      <div className="trainer-left-column">
+        <div className="camera-preview-container trainer-camera-preview">
           {webcamError && <div className="error-message">{webcamError}</div>}
-          <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: 'auto', transform: 'scaleX(-1)' }} />
+          <video ref={videoRef} autoPlay playsInline muted className="trainer-camera-video" />
         </div>
-        
+
         {/* Typing Word Display (Drill-down Drill) */}
         {isRecording && (
-          <div style={{
-            width: '100%',
-            background: flashError ? 'rgba(255, 77, 77, 0.15)' : 'rgba(255, 255, 255, 0.03)',
-            border: flashError ? '1px solid rgba(255, 77, 77, 0.5)' : '1px solid rgba(255, 255, 255, 0.08)',
-            borderRadius: '16px',
-            padding: '1.2rem',
-            textAlign: 'center',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
-            transition: 'all 0.15s ease-in-out',
-            boxSizing: 'border-box'
-          }}>
+          <div className={`trainer-word-display${flashError ? ' is-error' : ''}`}>
             {/* Classification Path */}
-            <div style={{ fontSize: '0.85rem', color: '#00adb5', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.4rem' }}>
+            <div className="trainer-word-path">
               {practiceList[currentWordIndex]?.path}
             </div>
-            
+
             {/* Japanese Label */}
-            <div style={{ fontSize: '1.4rem', fontWeight: 400, color: '#fff', marginBottom: '0.8rem' }}>
+            <div className="trainer-word-japanese">
               {practiceList[currentWordIndex]?.node.japanese}
             </div>
-            
+
             {/* Romanized Text to Type */}
-            <div style={{
-              fontSize: '2rem',
-              fontFamily: 'monospace',
-              fontWeight: 'bold',
-              letterSpacing: '4px',
-              color: 'rgba(255, 255, 255, 0.2)'
-            }}>
-              <span style={{ color: '#888' }}>
+            <div className="trainer-word-romaji">
+              <span className="trainer-romaji-typed">
                 {practiceList[currentWordIndex]?.node.romaji.slice(0, currentCharIndex)}
               </span>
-              <span style={{ color: '#00ffcc', borderBottom: '3px solid #00ffcc', paddingBottom: '2px' }}>
+              <span className="trainer-romaji-current">
                 {practiceList[currentWordIndex]?.node.romaji[currentCharIndex]}
               </span>
-              <span style={{ color: '#fff' }}>
+              <span className="trainer-romaji-remaining">
                 {practiceList[currentWordIndex]?.node.romaji.slice(currentCharIndex + 1)}
               </span>
             </div>
             {realtimeFeedback && (
-              <div 
-                style={{ 
-                  marginTop: '1rem', 
-                  padding: '0.5rem 1rem',
-                  borderRadius: '8px',
-                  background: realtimeFeedback.isCorrect ? 'rgba(0, 255, 204, 0.1)' : 'rgba(255, 77, 77, 0.1)',
-                  border: realtimeFeedback.isCorrect ? '1px solid rgba(0, 255, 204, 0.3)' : '1px solid rgba(255, 77, 77, 0.3)',
-                  color: realtimeFeedback.isCorrect ? '#00ffcc' : '#ff4d4d',
-                  fontSize: '0.85rem',
-                  fontWeight: 'bold',
-                  display: 'inline-block'
-                }}
+              <div
+                className={`trainer-realtime-feedback${realtimeFeedback.isCorrect ? ' is-correct' : ' is-incorrect'}`}
               >
                 {realtimeFeedback.isCorrect ? (
                   <span>✓ 正しい指使いです！ ({realtimeFeedback.got})</span>
@@ -316,135 +295,75 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
           </div>
         )}
 
-        <div style={{ position: 'relative', background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '16px' }}>
-           <VirtualKeyboard 
-            layout={layout} 
-            unitSize={42} 
-            gap={5} 
+        <div className="trainer-keyboard-wrapper">
+           <VirtualKeyboard
+            layout={layout}
+            unitSize={42}
+            gap={5}
             pointers={[]}
             activeKeyCode={pressedKeyCode}
           />
         </div>
       </div>
-      
+
       {/* Right Column: Controls & Plant Tree */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem', width: '340px' }}>
-        
+      <div className="trainer-right-column">
+
         {/* Control Panel */}
-        <div style={{
-          width: '100%',
-          background: 'rgba(255,255,255,0.03)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          borderRadius: '16px',
-          padding: '1.5rem',
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: '1rem'
-        }}>
+        <div className="trainer-control-panel">
           {homography && (
-            <div style={{ width: '100%', textAlign: 'center', padding: '0.5rem', background: 'rgba(0, 255, 0, 0.1)', color: '#0f0', borderRadius: '8px', border: '1px solid rgba(0, 255, 0, 0.2)', fontSize: '0.9rem' }}>
+            <div className="trainer-calibration-status">
               ✓ キャリブレーション有効
             </div>
           )}
 
           {/* Mode Selector */}
-          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.2rem' }}>
-            <label style={{ fontSize: '0.75rem', color: '#888', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px', textAlign: 'left', width: '100%' }}>
+          <div className="trainer-mode-selector">
+            <label className="trainer-mode-label">
               解析モード
             </label>
-            <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', padding: '3px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', width: '100%', boxSizing: 'border-box' }}>
+            <div className="trainer-mode-toggle">
               <button
                 disabled={isRecording}
                 onClick={() => handleSetAnalysisMode('offline')}
-                style={{
-                  flex: 1,
-                  padding: '0.4rem',
-                  background: analysisMode === 'offline' ? 'linear-gradient(135deg, #00adb5, #007a82)' : 'transparent',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: isRecording ? 'not-allowed' : 'pointer',
-                  fontSize: '0.7rem',
-                  fontWeight: 'bold',
-                  transition: 'all 0.2s'
-                }}
+                className={`trainer-mode-btn${analysisMode === 'offline' ? ' is-active' : ''}`}
               >
                 🎥 録画後解析
               </button>
               <button
                 disabled={isRecording}
                 onClick={() => handleSetAnalysisMode('realtime')}
-                style={{
-                  flex: 1,
-                  padding: '0.4rem',
-                  background: analysisMode === 'realtime' ? 'linear-gradient(135deg, #00adb5, #007a82)' : 'transparent',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: isRecording ? 'not-allowed' : 'pointer',
-                  fontSize: '0.7rem',
-                  fontWeight: 'bold',
-                  transition: 'all 0.2s'
-                }}
+                className={`trainer-mode-btn${analysisMode === 'realtime' ? ' is-active' : ''}`}
               >
                 ⚡️ 打鍵時即時
               </button>
             </div>
             {!isWorkerReady && analysisMode === 'realtime' && (
-              <div style={{ fontSize: '11px', color: '#ffcc00', textAlign: 'center', marginTop: '2px' }}>
+              <div className="trainer-model-loading">
                 ⚠️ AIモデル起動中...
               </div>
             )}
           </div>
 
-          <button 
+          <button
             onClick={toggleRecording}
             disabled={analysisMode === 'realtime' && !isWorkerReady}
-            style={{
-              width: '100%',
-              padding: '1rem',
-              background: isRecording ? 'linear-gradient(135deg, #ff4d4d, #cc0000)' : 'linear-gradient(135deg, #00adb5, #007a82)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '50px',
-              cursor: (analysisMode === 'realtime' && !isWorkerReady) ? 'not-allowed' : 'pointer',
-              fontWeight: 'bold',
-              fontSize: '1.1rem',
-              boxShadow: isRecording ? '0 4px 15px rgba(255, 77, 77, 0.4)' : '0 4px 15px rgba(0, 173, 181, 0.3)',
-              transition: 'all 0.2s',
-              opacity: (analysisMode === 'realtime' && !isWorkerReady) ? 0.5 : 1
-            }}
+            className={`trainer-record-btn${isRecording ? ' is-recording' : ''}`}
           >
             {isRecording ? '⏹ 練習終了して解析へ' : '⏺ タイピング練習開始'}
           </button>
-          
+
           {isRecording && (
-            <div style={{ fontSize: '13px', color: '#aaa', textAlign: 'center', lineHeight: '1.4' }}>
+            <div className="trainer-recording-hint">
               好きな文字を入力してください。<br />
               正しい指使いで入力すると、下の木が成長します。
             </div>
           )}
         </div>
 
-        <div style={{
-          flex: 1,
-          width: '100%',
-          background: 'rgba(255,255,255,0.03)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          borderRadius: '16px',
-          padding: '1.5rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#888',
-          fontSize: '0.95rem',
-          lineHeight: '1.6',
-          textAlign: 'center'
-        }}>
+        <div className="trainer-tree-panel">
           <div>
-            <span style={{ fontSize: '2rem', display: 'block', marginBottom: '0.5rem' }}>🌲</span>
+            <span className="trainer-tree-icon">🌲</span>
             解析（Analysis）後に<br/>結果ツリーが表示されます
           </div>
         </div>
