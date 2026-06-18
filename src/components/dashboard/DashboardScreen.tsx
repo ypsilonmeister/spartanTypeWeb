@@ -19,16 +19,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ layout, initia
   const [unanalyzedData, setUnanalyzedData] = useState<UnanalyzedSessionData | null>(initialUnanalyzedData || null);
   const [error, setError] = useState<string | null>(null);
 
-  const [prevInitialData, setPrevInitialData] = useState(initialUnanalyzedData);
-  const [prevAnalyzedData, setPrevAnalyzedData] = useState(initialAnalyzedData);
-
-  if (initialUnanalyzedData !== prevInitialData || initialAnalyzedData !== prevAnalyzedData) {
-    setUnanalyzedData(initialUnanalyzedData || null);
-    setSessionData(initialAnalyzedData || null);
-    setPrevInitialData(initialUnanalyzedData);
-    setPrevAnalyzedData(initialAnalyzedData);
-  }
-
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;

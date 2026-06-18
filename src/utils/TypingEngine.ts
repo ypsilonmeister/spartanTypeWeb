@@ -5,7 +5,7 @@ import { matchKLEKey, expectedFingerMap } from './keyMap';
 import type { CalibrationHomography } from './calibrationStorage';
 
 export interface HandData {
-  landmarks: { x: number, y: number, z: number }[];
+  landmarks: { x: number, y: number, z: number, visibility?: number }[];
   handedness: 'Left' | 'Right';
 }
 
@@ -96,6 +96,24 @@ export class TypingEngine {
     this.isRecording = false;
   }
 
+  /**
+   * タイムスタンプに最も近いフレームを検索する。
+   * @param timestamp - 比較対象のタイムスタンプ (ms)
+   * @param maxDiffMs - この値より差が大きければ null を返す (デフォルト 500ms)
+   */
+  private findNearestFrame(timestamp: number, maxDiffMs = 500): FrameLog | null {
+    let nearestFrame: FrameLog | null = null;
+    let minTimeDiff = Infinity;
+    for (const frame of this.frames) {
+      const diff = Math.abs(frame.timestamp - timestamp);
+      if (diff < minTimeDiff) {
+        minTimeDiff = diff;
+        nearestFrame = frame;
+      }
+    }
+    return nearestFrame !== null && minTimeDiff <= maxDiffMs ? nearestFrame : null;
+  }
+
   public getRawKeystrokes(): KeystrokeLog[] {
     return this.keystrokes;
   }
@@ -125,18 +143,9 @@ export class TypingEngine {
 
   public exportSession(): string {
     const enrichedKeystrokes = this.keystrokes.map(ks => {
-      let nearestFrame: FrameLog | null = null;
-      let minTimeDiff = Infinity;
-      
-      for (const frame of this.frames) {
-        const diff = Math.abs(frame.timestamp - ks.timestamp);
-        if (diff < minTimeDiff) {
-          minTimeDiff = diff;
-          nearestFrame = frame;
-        }
-      }
+      const nearestFrame = this.findNearestFrame(ks.timestamp);
 
-      if (!nearestFrame || minTimeDiff > 500) {
+      if (!nearestFrame) {
         return { ...ks, isCorrectFinger: undefined };
       }
 

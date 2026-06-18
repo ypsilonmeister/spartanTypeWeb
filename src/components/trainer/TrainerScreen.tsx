@@ -3,16 +3,17 @@ import { VirtualKeyboard } from '../common/VirtualKeyboard';
 import type { KeyboardLayout } from '../../types/kle';
 import { useWebcam } from '../../hooks/useWebcam';
 import { TypingEngine } from '../../utils/TypingEngine';
-import type { UnanalyzedSessionData, FrameLog } from '../../utils/TypingEngine';
+import type { UnanalyzedSessionData, SessionData, FrameLog } from '../../utils/TypingEngine';
 import { useWorker } from '../../hooks/useWorker';
 import { getFlatPracticeList } from '../../utils/plantDictionary';
+import { mapMediaPipeResults } from '../../utils/mediapipeUtils';
 import '../../styles/cameraPreview.css';
 import type { CalibrationHomography } from '../../utils/calibrationStorage';
 
 interface TrainerScreenProps {
   layout: KeyboardLayout;
   homography: CalibrationHomography | null;
-  onSessionComplete?: (data: UnanalyzedSessionData) => void;
+  onSessionComplete?: (data: UnanalyzedSessionData | SessionData) => void;
 }
 
 export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography, onSessionComplete }) => {
@@ -125,14 +126,8 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
         const { results, timestamp } = e.data;
         if (!engineRef.current) return;
 
-        // Map results to HandData format
-        const handsData = results && results.landmarks ? results.landmarks.map((landmarks: { x: number; y: number; z: number }[], index: number) => {
-          const catName = results.handednesses?.[index]?.[0]?.categoryName;
-          const handedness: 'Left' | 'Right' = (catName === 'Left' || catName === 'Right')
-            ? catName
-            : (landmarks[0].x < 0.5 ? 'Right' : 'Left');
-          return { landmarks, handedness };
-        }) : [];
+        // Map results to HandData format using shared utility
+        const handsData = mapMediaPipeResults(results);
 
         // Map to layout coordinates and process frame
         const video = videoRef.current;
@@ -245,7 +240,7 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
   };
 
   return (
-    <div style={{ display: 'flex', gap: '2rem', width: '100%', maxWidth: '1200px', justifyContent: 'center', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', gap: '2rem', width: '100%', maxWidth: '1200px', justifyContent: 'center', alignItems: 'flex-start', flexWrap: 'wrap', overflow: 'hidden', flex: 1, minHeight: 0 }}>
       
       {/* Left Column: Camera Video & Virtual Keyboard */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem', flex: '1 1 640px', maxWidth: '720px' }}>
@@ -406,6 +401,7 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
 
           <button 
             onClick={toggleRecording}
+            disabled={analysisMode === 'realtime' && !isWorkerReady}
             style={{
               width: '100%',
               padding: '1rem',
@@ -413,11 +409,12 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
               color: '#fff',
               border: 'none',
               borderRadius: '50px',
-              cursor: 'pointer',
+              cursor: (analysisMode === 'realtime' && !isWorkerReady) ? 'not-allowed' : 'pointer',
               fontWeight: 'bold',
               fontSize: '1.1rem',
               boxShadow: isRecording ? '0 4px 15px rgba(255, 77, 77, 0.4)' : '0 4px 15px rgba(0, 173, 181, 0.3)',
-              transition: 'all 0.2s'
+              transition: 'all 0.2s',
+              opacity: (analysisMode === 'realtime' && !isWorkerReady) ? 0.5 : 1
             }}
           >
             {isRecording ? '⏹ 練習終了して解析へ' : '⏺ タイピング練習開始'}

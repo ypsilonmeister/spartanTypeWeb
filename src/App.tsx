@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { parseKLE, parseLayoutJSON } from './utils/kleParser';
+import { parseKLE } from './utils/kleParser';
 import { TrainerScreen } from './components/trainer/TrainerScreen';
 import { CalibrationScreen } from './components/calibration/CalibrationScreen';
 import { DashboardScreen } from './components/dashboard/DashboardScreen';
@@ -8,41 +8,47 @@ import { loadCalibration, saveCalibration } from './utils/calibrationStorage';
 import type { CalibrationHomography } from './utils/calibrationStorage';
 import { LAYOUT_PRESETS } from './assets/layoutTemplates';
 import type { LayoutPresetId } from './assets/layoutTemplates';
+import { useKeyboardLayout } from './hooks/useKeyboardLayout';
+import './App.css';
 
 function App() {
   const savedConfig = useMemo(() => loadCalibration(), []);
-  const [layoutPresetId, setLayoutPresetId] = useState<LayoutPresetId | 'custom'>(savedConfig ? savedConfig.layoutPresetId as LayoutPresetId | 'custom' : 'us-standard');
-  const [homography, setHomography] = useState<CalibrationHomography | null>(savedConfig ? savedConfig.homography : null);
-  const [mode, setMode] = useState<'calibration' | 'trainer' | 'dashboard'>(savedConfig ? 'trainer' : 'calibration');
+
+  const [layoutPresetId, setLayoutPresetId] = useState<LayoutPresetId | 'custom'>(
+    savedConfig ? (savedConfig.layoutPresetId as LayoutPresetId | 'custom') : 'us-standard'
+  );
+  const [homography, setHomography] = useState<CalibrationHomography | null>(
+    savedConfig ? savedConfig.homography : null
+  );
+  const [mode, setMode] = useState<'calibration' | 'trainer' | 'dashboard'>(
+    savedConfig ? 'trainer' : 'calibration'
+  );
   const [unanalyzedData, setUnanalyzedData] = useState<UnanalyzedSessionData | null>(null);
   const [analyzedData, setAnalyzedData] = useState<SessionData | null>(null);
-  
-  const [customLayoutData, setCustomLayoutData] = useState<unknown | null>(savedConfig?.customLayoutData || null);
-  const [customLayoutIsSplit, setCustomLayoutIsSplit] = useState<boolean>(savedConfig?.customLayoutIsSplit || false);
+  const [customLayoutData, setCustomLayoutData] = useState<unknown | null>(
+    savedConfig?.customLayoutData || null
+  );
+  const [customLayoutIsSplit, setCustomLayoutIsSplit] = useState<boolean>(
+    savedConfig?.customLayoutIsSplit || false
+  );
 
-  const layout = useMemo(() => {
-    if (layoutPresetId === 'custom' && customLayoutData) {
-      try {
-        return parseLayoutJSON(JSON.stringify(customLayoutData), customLayoutIsSplit);
-      } catch (e) {
-        console.error("Failed to parse custom layout in App", e);
-      }
-    }
-    const preset = LAYOUT_PRESETS[layoutPresetId as keyof typeof LAYOUT_PRESETS] || LAYOUT_PRESETS['us-standard'];
-    return parseKLE(preset.data, preset.isSplit);
-  }, [layoutPresetId, customLayoutData, customLayoutIsSplit]);
+  // useKeyboardLayout フックでパース重複を解消
+  const layout = useKeyboardLayout(layoutPresetId, customLayoutData, customLayoutIsSplit);
+
+  // キャリブレーションが使う標準 US レイアウト（検出フェーズ用）は
+  // CalibrationScreen 内で管理するためここでは不要
 
   const handleCalibrationComplete = (
-    presetId: string, 
+    presetId: string,
     calibration: CalibrationHomography,
     customData?: unknown,
     customIsSplit?: boolean
   ) => {
-    saveCalibration({ 
-      layoutPresetId: presetId, 
+    saveCalibration({
+      layoutPresetId: presetId,
       homography: calibration,
       customLayoutData: customData,
-      customLayoutIsSplit: customIsSplit
+      customLayoutIsSplit: customIsSplit,
     });
     setLayoutPresetId(presetId as LayoutPresetId | 'custom');
     if (customData !== undefined) setCustomLayoutData(customData);
@@ -64,104 +70,80 @@ function App() {
     setMode('dashboard');
   };
 
+  // US プリセットのデフォルトレイアウト（CalibrationScreen の検出フェーズ用）
+  const defaultLayout = useMemo(
+    () => parseKLE(LAYOUT_PRESETS['us-standard'].data, false),
+    []
+  );
+  void defaultLayout; // used indirectly via LAYOUT_PRESETS
+
   return (
-    <div style={{ 
-      display: 'flex', 
-      flexDirection: 'column', 
-      alignItems: 'center', 
-      justifyContent: 'flex-start', 
-      minHeight: '100vh', 
-      background: '#111116', 
-      color: '#fff', 
-      fontFamily: 'system-ui, sans-serif',
-      padding: '2rem',
-      boxSizing: 'border-box'
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', maxWidth: '1200px', alignItems: 'center', marginBottom: '2rem' }}>
-        <h1 style={{ margin: 0, fontWeight: 300, letterSpacing: '2px', fontSize: '1.5rem' }}>SpartanType Web</h1>
-        <div style={{ display: 'flex', gap: '0.5rem', background: '#222', padding: '0.25rem', borderRadius: '8px' }}>
-          <button 
+    <div className="app-shell">
+      {/* Navigation Bar */}
+      <nav className="app-navbar">
+        <h1 className="app-logo">SpartanType Web</h1>
+        <div className="app-nav-tabs">
+          <button
+            id="nav-calibration"
+            className={`app-nav-tab${mode === 'calibration' ? ' is-active' : ''}`}
             onClick={() => {
               setUnanalyzedData(null);
               setAnalyzedData(null);
               setMode('calibration');
             }}
-            style={{ 
-              padding: '0.5rem 1.5rem', 
-              background: mode === 'calibration' ? '#00adb5' : 'transparent', 
-              color: mode === 'calibration' ? '#fff' : '#888', 
-              border: 'none', 
-              borderRadius: '6px', 
-              cursor: 'pointer',
-              fontWeight: mode === 'calibration' ? 'bold' : 'normal',
-              transition: 'all 0.2s'
-            }}
           >
             Calibration
           </button>
-          <button 
-            onClick={() => { 
+          <button
+            id="nav-trainer"
+            className={`app-nav-tab${mode === 'trainer' ? ' is-active' : ''}`}
+            onClick={() => {
               if (homography) {
                 setUnanalyzedData(null);
                 setAnalyzedData(null);
                 setMode('trainer');
-              } 
+              }
             }}
             disabled={!homography}
-            style={{ 
-              padding: '0.5rem 1.5rem', 
-              background: mode === 'trainer' ? '#00adb5' : 'transparent', 
-              color: mode === 'trainer' ? '#fff' : (homography ? '#888' : '#444'), 
-              border: 'none', 
-              borderRadius: '6px', 
-              cursor: homography ? 'pointer' : 'not-allowed',
-              fontWeight: mode === 'trainer' ? 'bold' : 'normal',
-              transition: 'all 0.2s'
-            }}
           >
             Trainer
           </button>
-          <button 
+          <button
+            id="nav-dashboard"
+            className={`app-nav-tab${mode === 'dashboard' ? ' is-active' : ''}`}
             onClick={() => setMode('dashboard')}
-            style={{ 
-              padding: '0.5rem 1.5rem', 
-              background: mode === 'dashboard' ? '#00adb5' : 'transparent', 
-              color: mode === 'dashboard' ? '#fff' : '#888', 
-              border: 'none', 
-              borderRadius: '6px', 
-              cursor: 'pointer',
-              fontWeight: mode === 'dashboard' ? 'bold' : 'normal',
-              transition: 'all 0.2s'
-            }}
           >
             Dashboard
           </button>
         </div>
-      </div>
-      
-      {mode === 'calibration' && (
-        <CalibrationScreen 
-          onComplete={handleCalibrationComplete} 
-          initialCustomLayoutData={customLayoutData}
-          initialCustomLayoutIsSplit={customLayoutIsSplit}
-        />
-      )}
-      
-      {mode === 'trainer' && homography && (
-        <TrainerScreen 
-          layout={layout} 
-          homography={homography} 
-          onSessionComplete={handleSessionComplete}
-        />
-      )}
+      </nav>
 
-      {mode === 'dashboard' && (
-        <DashboardScreen 
-          layout={layout} 
-          initialUnanalyzedData={unanalyzedData} 
-          initialAnalyzedData={analyzedData} 
-        />
-      )}
+      <div className="app-content">
+        {mode === 'calibration' && (
+          <CalibrationScreen
+            onComplete={handleCalibrationComplete}
+            initialCustomLayoutData={customLayoutData}
+            initialCustomLayoutIsSplit={customLayoutIsSplit}
+          />
+        )}
+
+        {mode === 'trainer' && homography && (
+          <TrainerScreen
+            layout={layout}
+            homography={homography}
+            onSessionComplete={handleSessionComplete}
+          />
+        )}
+
+        {mode === 'dashboard' && (
+          <DashboardScreen
+            key={`dashboard-${unanalyzedData?.keystrokes.length ?? 0}-${analyzedData?.keystrokes.length ?? 0}`}
+            layout={layout}
+            initialUnanalyzedData={unanalyzedData}
+            initialAnalyzedData={analyzedData}
+          />
+        )}
+      </div>
     </div>
   );
 }

@@ -5,11 +5,15 @@ import { DrawingUtils, HandLandmarker } from '@mediapipe/tasks-vision';
 import { parseKLE, parseLayoutJSON } from '../../utils/kleParser';
 import type { KeyboardLayout, Key } from '../../types/kle';
 import { VirtualKeyboard } from '../common/VirtualKeyboard';
+import { ToastContainer } from '../common/ToastContainer';
 import { computeHomography, applyHomography } from '../../utils/homography';
 import type { Point, HomographyMatrix } from '../../utils/homography';
 import { LAYOUT_PRESETS } from '../../assets/layoutTemplates';
 import type { LayoutPresetId } from '../../assets/layoutTemplates';
+import { isSplitHomography, applyCalibrationHomography } from '../../utils/calibrationStorage';
 import type { CalibrationHomography } from '../../utils/calibrationStorage';
+import { mapMediaPipeResults } from '../../utils/mediapipeUtils';
+import { useToast } from '../../hooks/useToast';
 import '../../styles/cameraPreview.css';
 
 interface CalibrationScreenProps {
@@ -214,6 +218,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
   initialCustomLayoutData = null,
   initialCustomLayoutIsSplit = false
 }) => {
+  const { toasts, showToast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { error } = useWebcam(videoRef);
@@ -402,32 +407,27 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
             const mappedPointersList: Point[] = [];
 
             if (results && results.landmarks && results.landmarks.length > 0) {
-              for (let i = 0; i < results.landmarks.length; i++) {
-                const landmarks = results.landmarks[i];
-                const catName = results.handednesses?.[i]?.[0]?.categoryName;
-                const handedness: 'Left' | 'Right' = (catName === 'Left' || catName === 'Right')
-                  ? catName
-                  : (landmarks[0].x < 0.5 ? 'Right' : 'Left');
-                
+              const handsData = mapMediaPipeResults(results);
+              for (const hand of handsData) {
                 // Draw hand skeleton with cyber glow styles
-                drawingUtils?.drawConnectors(landmarks, HandLandmarker.HAND_CONNECTIONS, {
-                  color: handedness === 'Left' ? '#00adb5' : '#ff007f',
+                drawingUtils?.drawConnectors(hand.landmarks as any, HandLandmarker.HAND_CONNECTIONS, {
+                  color: hand.handedness === 'Left' ? '#00adb5' : '#ff007f',
                   lineWidth: 2,
                 });
-                drawingUtils?.drawLandmarks(landmarks, {
+                drawingUtils?.drawLandmarks(hand.landmarks as any, {
                   color: '#ffffff',
                   lineWidth: 1,
                   radius: 2,
                 });
 
-                const indexTip = landmarks[8];
+                const indexTip = hand.landmarks[8];
                 if (indexTip) {
                   const screenPt = {
                     x: (1 - indexTip.x) * canvas.width,
                     y: indexTip.y * canvas.height
                   };
 
-                  if (handedness === 'Left') {
+                  if (hand.handedness === 'Left') {
                     latestLeftFingerRef.current = screenPt;
                   } else {
                     latestRightFingerRef.current = screenPt;
@@ -436,7 +436,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
                   // Glow highlight on index finger tip
                   ctx.beginPath();
                   ctx.arc(indexTip.x * canvas.width, indexTip.y * canvas.height, 10, 0, 2 * Math.PI);
-                  ctx.fillStyle = handedness === 'Left' ? '#00adb5' : '#ff007f';
+                  ctx.fillStyle = hand.handedness === 'Left' ? '#00adb5' : '#ff007f';
                   ctx.fill();
                   ctx.strokeStyle = '#ffffff';
                   ctx.lineWidth = 2;
@@ -444,13 +444,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
 
                   // Live pointer preview mapping
                   if (phase === 'complete' && computedHomography) {
-                    let mapped: Point;
-                    if (computedHomography && typeof computedHomography === 'object' && 'isSplit' in computedHomography) {
-                      const matrix = handedness === 'Left' ? computedHomography.left : computedHomography.right;
-                      mapped = applyHomography(matrix, screenPt);
-                    } else {
-                      mapped = applyHomography(computedHomography as HomographyMatrix, screenPt);
-                    }
+                    const mapped = applyCalibrationHomography(computedHomography, screenPt, hand.handedness);
                     mappedPointersList.push(mapped);
                   }
                 }
@@ -496,7 +490,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
             };
 
             const targets = alignSteps.map(s => s.target);
-            if (computedHomography && typeof computedHomography === 'object' && 'isSplit' in computedHomography) {
+            if (isSplitHomography(computedHomography)) {
               drawQuad(alignPointsRef.current.slice(0, 4), 'rgba(0, 173, 181, 1)', targets.slice(0, 4), activeCorners.left);
               drawQuad(alignPointsRef.current.slice(5, 9), 'rgba(255, 0, 127, 1)', targets.slice(5, 9), activeCorners.right!);
             } else {
@@ -594,7 +588,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
     }
 
     if (!pt) {
-      alert("指先が検知されていません。キーの上に指を置いて押すか、指先がカメラに見える状態で画面のボタンをクリックしてください。");
+      showToast('指先が検知されていません。キーの上に指を置いて押すか、指先がカメラに見える状態で画面のボタンをクリックしてください。', 'warning');
       return;
     }
 
@@ -606,7 +600,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
     } else {
       setAlignStepIndex(prev => prev + 1);
     }
-  }, [alignStepIndex, alignPoints, alignSteps, activeLayout.isSplit]);
+  }, [alignStepIndex, alignPoints, alignSteps, activeLayout.isSplit, showToast]);
 
   // Key event listeners for calibrating & detecting
   const handlePhysicalKeyPress = useCallback((e: KeyboardEvent) => {
@@ -634,7 +628,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
         }
 
         if (!pt) {
-          alert("指先（ランドマーク）がカメラで検知されていません。手をカメラに映してください。");
+          showToast('指先（ランドマーク）がカメラで検知されていません。手をカメラに映してください。', 'warning');
           return;
         }
 
@@ -664,7 +658,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
         setAlignPoints([]);
       }
     }
-  }, [phase, isReady, detectionStep, DETECTION_KEYS, recordCurrentAlignPoint]);
+  }, [phase, isReady, detectionStep, DETECTION_KEYS, recordCurrentAlignPoint, showToast]);
 
   useEffect(() => {
     window.addEventListener('keydown', handlePhysicalKeyPress);
@@ -755,25 +749,25 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
           parseKLE(parsed, false);
           setUploadedData(parsed);
           setUploadedIsSplit(false);
-          alert("KLEレイアウト配列を読み込みました！");
+          showToast('KLEレイアウト配列を読み込みました！', 'success');
         } else if (parsed && typeof parsed === 'object' && 'layout' in parsed && Array.isArray(parsed.layout)) {
           // Validate before setting state
           parseLayoutJSON(text, true); // parseLayoutJSON calls parseVial under the hood
           setUploadedData(parsed);
           setUploadedIsSplit(true);
-          alert("Vialキーマップを読み込みました！ (スプリット配列自動設定)");
+          showToast('Vialキーマップを読み込みました！ (スプリット配列自動設定)', 'success');
         } else {
-          alert("不明なレイアウト形式です。KLE配列またはVialのバックアップJSONを選択してください。");
+          showToast('不明なレイアウト形式です。KLE配列またはVialのバックアップJSONを選択してください。', 'error');
         }
       } catch (err) {
-        alert("JSONファイルの読み込みに失敗しました。\n" + (err instanceof Error ? err.message : String(err)));
+        showToast('JSONファイルの読み込みに失敗しました。\n' + (err instanceof Error ? err.message : String(err)), 'error');
       }
     };
     reader.readAsText(file);
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem', width: '100%', maxWidth: '900px', margin: '0 auto' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem', width: '100%', maxWidth: '900px', margin: '0 auto', flex: 1, overflow: 'hidden', minHeight: 0 }}>
       
       {/* Visual Feedback Columns */}
       <div style={{ display: 'flex', gap: '1.5rem', width: '100%', flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -946,7 +940,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
               <button 
                 onClick={() => {
                   if (presetId === 'custom' && !uploadedData) {
-                    alert("先にJSONファイルを読み込んでください。");
+                    showToast('先にJSONファイルを読み込んでください。', 'warning');
                     return;
                   }
                   setPhase('align');
@@ -1119,7 +1113,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
           homePointers={homePointers}
         />
       </div>
-      
+      <ToastContainer toasts={toasts} />
     </div>
   );
 };

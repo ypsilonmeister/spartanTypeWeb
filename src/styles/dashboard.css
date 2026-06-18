@@ -5,6 +5,10 @@
   max-width: 1000px;
   gap: 2rem;
   color: #fff;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding-bottom: 1rem;
 }
 
 .dashboard-header {

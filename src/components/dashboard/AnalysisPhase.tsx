@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { UnanalyzedSessionData, SessionData } from '../../utils/TypingEngine';
 import { TypingEngine } from '../../utils/TypingEngine';
 import { useWorker } from '../../hooks/useWorker';
+import { mapMediaPipeResults } from '../../utils/mediapipeUtils';
 import type { KeyboardLayout } from '../../types/kle';
 
 interface AnalysisPhaseProps {
@@ -59,6 +60,8 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
       let lastProcessedTime = -1;
       let frameCounter = 0;
       let isFinalized = false;
+      let finalizeRetryCount = 0;
+      const FINALIZE_MAX_RETRIES = 100; // 最大 10 秒待機
 
       const handleWorkerMessage = (e: MessageEvent) => {
         if (e.data.type === 'DETECT_RESULT') {
@@ -71,14 +74,7 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
           }
           
           if (results && results.landmarks && results.landmarks.length > 0) {
-            const handsData = results.landmarks.map((landmarks: { x: number; y: number; z: number }[], index: number) => {
-              const catName = results.handednesses?.[index]?.[0]?.categoryName;
-              const handedness: 'Left' | 'Right' = (catName === 'Left' || catName === 'Right')
-                ? catName
-                : (landmarks[0].x < 0.5 ? 'Right' : 'Left');
-              return { landmarks, handedness };
-            });
-
+            const handsData = mapMediaPipeResults(results);
             dummyEngine.processFrame(handsData, timestamp, canvas.width, canvas.height);
           } else {
              dummyEngine.processFrame([], timestamp, canvas.width, canvas.height);
@@ -93,10 +89,14 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
 
       const finalize = () => {
         if (isFinalized) return;
-        if (pendingFrames > 0) {
-          console.log(`[Analysis] Finalizing queued. Waiting for ${pendingFrames} pending frames to resolve...`);
+        if (pendingFrames > 0 && finalizeRetryCount < FINALIZE_MAX_RETRIES) {
+          finalizeRetryCount++;
+          console.log(`[Analysis] Finalizing queued. Waiting for ${pendingFrames} pending frames to resolve... (retry ${finalizeRetryCount}/${FINALIZE_MAX_RETRIES})`);
           setTimeout(finalize, 100);
           return;
+        }
+        if (pendingFrames > 0) {
+          console.warn(`[Analysis] Timed out waiting for ${pendingFrames} pending frames. Proceeding with available data.`);
         }
         isFinalized = true;
         
