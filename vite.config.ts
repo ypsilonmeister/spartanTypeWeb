@@ -12,7 +12,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg'],
+      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       workbox: {
         // MediaPipe のモデル(~10MB)と WASM は CDN から取得するため、
         // precache せず実行時に CacheFirst でキャッシュする。
@@ -29,8 +29,11 @@ export default defineConfig({
                 maxAgeSeconds: 60 * 60 * 24 * 90, // 90 日
               },
               cacheableResponse: {
-                // googleapis は CORS で opaque(0) になり得るため 0 も許可
-                statuses: [0, 200],
+                // jsDelivr / Google Storage は CORS ヘッダを返すため 200 のみ許可する。
+                // opaque(0) を許可すると CORS リクエストに opaque を返してしまい
+                // "an opaque response was used for a request whose type is not no-cors"
+                // エラーで MediaPipe の WASM/モデル読み込みが失敗するため 0 は含めない。
+                statuses: [200],
               },
             },
           },
@@ -45,7 +48,7 @@ export default defineConfig({
                 maxAgeSeconds: 60 * 60 * 24 * 90, // 90 日
               },
               cacheableResponse: {
-                statuses: [0, 200],
+                statuses: [200],
               },
             },
           },
@@ -63,6 +66,22 @@ export default defineConfig({
             src: 'favicon.svg',
             sizes: '192x192 512x512',
             type: 'image/svg+xml',
+            purpose: 'any maskable'
+          },
+          {
+            src: 'pwa-192x192.png',
+            sizes: '192x192',
+            type: 'image/png'
+          },
+          {
+            src: 'pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png'
+          },
+          {
+            src: 'pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
             purpose: 'any maskable'
           }
         ]
