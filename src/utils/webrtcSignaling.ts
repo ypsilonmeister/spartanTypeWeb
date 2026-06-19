@@ -1,4 +1,6 @@
 import pako from 'pako';
+import { sdpToCompact, compactToSdp } from './compactSignaling';
+import type { CompactSignal } from './compactSignaling';
 
 /**
  * サーバー不要の手動シグナリングによる WebRTC ヘルパー。
@@ -18,9 +20,9 @@ const ICE_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun1.l.google.com:19302' },
 ];
 
-/** SDP 等の文字列を deflate 圧縮し、URL セーフな base64 にする。 */
-export function encodeSignal(text: string): string {
-  const compressed = pako.deflate(text);
+/** コンパクト表現を deflate 圧縮し、URL セーフな base64 にする (QR を小さく保つ)。 */
+export function encodeSignal(sig: CompactSignal): string {
+  const compressed = pako.deflate(JSON.stringify(sig));
   let binary = '';
   for (let i = 0; i < compressed.length; i++) {
     binary += String.fromCharCode(compressed[i]);
@@ -28,15 +30,15 @@ export function encodeSignal(text: string): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-/** encodeSignal の逆。base64url → deflate 解凍して元の文字列へ戻す。 */
-export function decodeSignal(encoded: string): string {
+/** encodeSignal の逆。base64url → deflate 解凍してコンパクト表現へ戻す。 */
+export function decodeSignal(encoded: string): CompactSignal {
   const base64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i);
   }
-  return pako.inflate(bytes, { to: 'string' });
+  return JSON.parse(pako.inflate(bytes, { to: 'string' })) as CompactSignal;
 }
 
 /**
@@ -85,14 +87,15 @@ export async function createHostOffer(pc: RTCPeerConnection): Promise<string> {
   await waitForIceGathering(pc);
 
   if (!pc.localDescription) throw new Error('Failed to create local offer description');
-  return encodeSignal(JSON.stringify(pc.localDescription));
+  // 完全な SDP からコンパクト表現を抽出してエンコード (QR を小さく保つ)。
+  return encodeSignal(sdpToCompact(pc.localDescription));
 }
 
 /**
  * PC (host) 側: スマホから受け取ったエンコード済み answer を適用する。
  */
 export async function acceptAnswer(pc: RTCPeerConnection, encodedAnswer: string): Promise<void> {
-  const answer = JSON.parse(decodeSignal(encodedAnswer.trim())) as RTCSessionDescriptionInit;
+  const answer = compactToSdp(decodeSignal(encodedAnswer.trim()));
   await pc.setRemoteDescription(answer);
 }
 
@@ -105,7 +108,7 @@ export async function createGuestAnswer(
   encodedOffer: string,
   stream: MediaStream
 ): Promise<string> {
-  const offer = JSON.parse(decodeSignal(encodedOffer.trim())) as RTCSessionDescriptionInit;
+  const offer = compactToSdp(decodeSignal(encodedOffer.trim()));
 
   // 自分のカメラトラックを送信側として載せる。
   for (const track of stream.getTracks()) {
@@ -118,5 +121,5 @@ export async function createGuestAnswer(
   await waitForIceGathering(pc);
 
   if (!pc.localDescription) throw new Error('Failed to create local answer description');
-  return encodeSignal(JSON.stringify(pc.localDescription));
+  return encodeSignal(sdpToCompact(pc.localDescription));
 }

@@ -23,7 +23,7 @@ export const QRCodeView: React.FC<QRCodeViewProps> = ({ value, size = 240 }) => 
     QRCode.toCanvas(
       canvas,
       value,
-      { width: size, margin: 1, errorCorrectionLevel: 'L', color: { dark: '#0a0a0e', light: '#ffffff' } },
+      { width: size, margin: 2, errorCorrectionLevel: 'M', color: { dark: '#0a0a0e', light: '#ffffff' } },
       (err) => {
         if (err) {
           // データが大きすぎて QR にできない場合 (典型的に長い SDP)
