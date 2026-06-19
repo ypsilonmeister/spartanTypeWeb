@@ -29,6 +29,29 @@ export const PhoneCameraPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // グローバルの overflow:hidden / height:100% (メインアプリ用) を、このページの間だけ解除する。
+  // :has() 非対応ブラウザでも効くよう、JS で html/body/#root を直接書き換える。
+  useEffect(() => {
+    document.body.classList.add('phone-camera-active');
+    const targets = [
+      document.documentElement,
+      document.body,
+      document.getElementById('root'),
+    ].filter(Boolean) as HTMLElement[];
+    const prev = targets.map((el) => ({ el, overflow: el.style.overflow, height: el.style.height }));
+    targets.forEach((el) => {
+      el.style.overflow = 'visible';
+      el.style.height = 'auto';
+    });
+    return () => {
+      document.body.classList.remove('phone-camera-active');
+      prev.forEach(({ el, overflow, height }) => {
+        el.style.overflow = overflow;
+        el.style.height = height;
+      });
+    };
+  }, []);
+
   const startConnection = useCallback(async (encodedOffer: string) => {
     setPhase('starting');
     setError(null);
