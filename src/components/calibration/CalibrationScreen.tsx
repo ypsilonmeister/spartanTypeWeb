@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { useWebcam } from '../../hooks/useWebcam';
+import { useCameraSource } from '../../hooks/useCameraSource';
+import type { CameraSource } from '../../hooks/useCameraSource';
+import { CameraSourceSelector } from '../camera/CameraSourceSelector';
 import { HandTracker } from '../../utils/handTracker';
 import { DrawingUtils, HandLandmarker } from '@mediapipe/tasks-vision';
 import type { NormalizedLandmark } from '@mediapipe/tasks-vision';
@@ -253,7 +255,14 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
   const { toasts, showToast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { error } = useWebcam(videoRef);
+  const [cameraSource, setCameraSource] = useState<CameraSource>('local');
+  const { error, isMirrored, remoteStatus, offer, submitAnswer, restartRemote } =
+    useCameraSource(videoRef, cameraSource);
+  // 描画ループは camera source 変更で再subscribeしないため、ミラー有無は ref 経由で参照する。
+  const isMirroredRef = useRef(isMirrored);
+  useEffect(() => {
+    isMirroredRef.current = isMirrored;
+  }, [isMirrored]);
   const [isReady, setIsReady] = useState(false);
   const [modelError, setModelError] = useState<string | null>(null);
 
@@ -421,9 +430,12 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
           }
 
           ctx.save();
-          // Mirror image for user facing camera
-          ctx.scale(-1, 1);
-          ctx.translate(-canvas.width, 0);
+          // 内向きカメラは鏡像表示。スマホ背面カメラ(remote)はミラーしない。
+          const mirror = isMirroredRef.current;
+          if (mirror) {
+            ctx.scale(-1, 1);
+            ctx.translate(-canvas.width, 0);
+          }
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
           if (video.currentTime !== lastVideoTime) {
@@ -450,8 +462,9 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
 
                 const indexTip = hand.landmarks[8];
                 if (indexTip) {
+                  // ミラー時は x を反転 (描画と座標系を一致させる)
                   const screenPt = {
-                    x: (1 - indexTip.x) * canvas.width,
+                    x: (mirror ? (1 - indexTip.x) : indexTip.x) * canvas.width,
                     y: indexTip.y * canvas.height
                   };
 
@@ -810,8 +823,8 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
             {(error || modelError) && <div className="error-message">{error || modelError}</div>}
             {!isReady && !error && !modelError && <div className="loading-message">Initializing Hand Tracker AI...</div>}
             <video ref={videoRef} autoPlay playsInline muted style={{ display: 'none' }} />
-            <canvas 
-              ref={canvasRef} 
+            <canvas
+              ref={canvasRef}
               className="camera-canvas"
               onMouseDown={handleCanvasMouseDown}
               onMouseMove={handleCanvasMouseMove}
@@ -820,6 +833,20 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
               style={{ cursor: phase === 'complete' ? (draggedPointIndex !== null ? 'grabbing' : 'grab') : 'default' }}
             />
           </div>
+
+          {/* カメラソース選択 (検出フェーズのみ。スマホを上からのカメラにできる) */}
+          {phase === 'detection' && (
+            <div style={{ marginTop: '1rem' }}>
+              <CameraSourceSelector
+                source={cameraSource}
+                onSourceChange={setCameraSource}
+                remoteStatus={remoteStatus}
+                offer={offer}
+                onSubmitAnswer={submitAnswer}
+                onRestart={restartRemote}
+              />
+            </div>
+          )}
         </div>
 
         {/* Right: Interaction Card */}

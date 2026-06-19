@@ -7,9 +7,18 @@ import { loadCalibration, saveCalibration } from './utils/calibrationStorage';
 import type { CalibrationHomography } from './utils/calibrationStorage';
 import type { LayoutPresetId } from './assets/layoutTemplates';
 import { useKeyboardLayout } from './hooks/useKeyboardLayout';
+import { PhoneCameraPage } from './components/camera/PhoneCameraPage';
 import './App.css';
 
 function App() {
+  // スマホがQRから開く専用ページ。?camera=phone のときは通常UIではなくカメラ送信ページを表示する。
+  if (new URLSearchParams(window.location.search).get('camera') === 'phone') {
+    return <PhoneCameraPage />;
+  }
+  return <MainApp />;
+}
+
+function MainApp() {
   const savedConfig = useMemo(() => loadCalibration(), []);
 
   const [layoutPresetId, setLayoutPresetId] = useState<LayoutPresetId | 'custom'>(

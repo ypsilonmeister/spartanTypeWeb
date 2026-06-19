@@ -1,7 +1,9 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { VirtualKeyboard } from '../common/VirtualKeyboard';
 import type { KeyboardLayout } from '../../types/kle';
-import { useWebcam } from '../../hooks/useWebcam';
+import { useCameraSource } from '../../hooks/useCameraSource';
+import type { CameraSource } from '../../hooks/useCameraSource';
+import { CameraSourceSelector } from '../camera/CameraSourceSelector';
 import { TypingEngine } from '../../utils/TypingEngine';
 import type { UnanalyzedSessionData, SessionData, FrameLog } from '../../utils/TypingEngine';
 import { useWorker } from '../../hooks/useWorker';
@@ -22,8 +24,17 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
   const handleKeyPressRef = useRef<(code: string, keystrokeIndex: number) => void>(() => {});
 
   const videoRef = useRef<HTMLVideoElement>(null);
-  const { error: webcamError, stream } = useWebcam(videoRef);
-  
+  const [cameraSource, setCameraSource] = useState<CameraSource>('local');
+  const {
+    error: webcamError,
+    stream,
+    isMirrored,
+    remoteStatus,
+    offer,
+    submitAnswer,
+    restartRemote,
+  } = useCameraSource(videoRef, cameraSource);
+
   const [pressedKeyCode, setPressedKeyCode] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
 
@@ -251,7 +262,15 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
       <div className="trainer-left-column">
         <div className="camera-preview-container trainer-camera-preview">
           {webcamError && <div className="error-message">{webcamError}</div>}
-          <video ref={videoRef} autoPlay playsInline muted className="trainer-camera-video" />
+          {/* 内向きカメラは鏡像、スマホ背面カメラはミラー不要 */}
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="trainer-camera-video"
+            style={{ transform: isMirrored ? 'scaleX(-1)' : 'none' }}
+          />
         </div>
 
         {/* Typing Word Display (Drill-down Drill) */}
@@ -315,6 +334,18 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
             <div className="trainer-calibration-status">
               ✓ キャリブレーション有効
             </div>
+          )}
+
+          {/* Camera Source Selector (PC内蔵 / スマホ) */}
+          {!isRecording && (
+            <CameraSourceSelector
+              source={cameraSource}
+              onSourceChange={setCameraSource}
+              remoteStatus={remoteStatus}
+              offer={offer}
+              onSubmitAnswer={submitAnswer}
+              onRestart={restartRemote}
+            />
           )}
 
           {/* Mode Selector */}
