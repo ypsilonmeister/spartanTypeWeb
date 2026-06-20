@@ -78,6 +78,9 @@
   font-weight: bold;
   letter-spacing: 4px;
   color: rgba(255, 255, 255, 0.2);
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
 }
 
 .trainer-romaji-typed {

@@ -65,7 +65,7 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
   const [realtimeFeedback, setRealtimeFeedback] = useState<RealtimeFeedback | null>(null);
 
   // Typing practice states based on Plant Dictionary
-  const practiceList = useMemo(() => getFlatPracticeList(), []);
+  const practiceList = useMemo(() => getFlatPracticeList({ shuffle: true }), []);
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
   const [flashError, setFlashError] = useState(false);
