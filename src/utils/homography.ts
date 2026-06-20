@@ -97,6 +97,59 @@ export function computeHomography(src: Point[], dst: Point[]): HomographyMatrix 
 }
 
 /**
+ * Computes a homography from N >= 4 point correspondences using least squares.
+ *
+ * 4点ぴったりなら computeHomography と同じ解になるが、5点以上を渡すと
+ * 過剰決定系を最小二乗 (normal equations: AᵀA x = Aᵀb) で解く。
+ * キャリブレーションでホーム8指 + コーナー(QZP/) など多数の対応点を
+ * 集約して安定した1枚の射影を得るために使用する。
+ *
+ * @param src カメラ画素座標の配列 (>= 4)
+ * @param dst 対応する KLE 論理座標の配列 (>= 4, src と同数)
+ * @returns 9要素の3x3行列 (row-major) または失敗時 null
+ */
+export function computeHomographyLS(src: Point[], dst: Point[]): HomographyMatrix | null {
+  if (src.length !== dst.length || src.length < 4) return null;
+
+  // 8 unknowns (h33 = 1 と固定)。各対応点が 2 本の方程式を与える。
+  const rows: number[][] = [];
+  const rhs: number[] = [];
+
+  for (let i = 0; i < src.length; i++) {
+    const { x, y } = src[i];
+    const { x: u, y: v } = dst[i];
+    rows.push([x, y, 1, 0, 0, 0, -u * x, -u * y]);
+    rhs.push(u);
+    rows.push([0, 0, 0, x, y, 1, -v * x, -v * y]);
+    rhs.push(v);
+  }
+
+  // Normal equations: (AᵀA) h = Aᵀb  →  8x8 の対称正定値系
+  const n = 8;
+  const ata: number[][] = Array.from({ length: n }, () => new Array<number>(n).fill(0));
+  const atb: number[] = new Array<number>(n).fill(0);
+
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r];
+    const b = rhs[r];
+    for (let i = 0; i < n; i++) {
+      atb[i] += row[i] * b;
+      for (let j = 0; j < n; j++) {
+        ata[i][j] += row[i] * row[j];
+      }
+    }
+  }
+
+  try {
+    const h = solveLinearSystem(ata, atb);
+    return [...h, 1];
+  } catch (e) {
+    console.error('Failed to compute least-squares homography', e);
+    return null;
+  }
+}
+
+/**
  * Applies a 3x3 homography matrix to a 2D point.
  *
  * @param matrix 3x3 Homography matrix (length 9 array)

@@ -17,6 +17,8 @@ interface VirtualKeyboardProps {
   activeKeyCode?: string | null;
   /** Expected key index in the layout to highlight for calibration guidance */
   targetKeyIndex?: number | null;
+  /** Multiple key indices to highlight simultaneously (e.g. home-row capture) */
+  highlightKeyIndices?: number[];
 }
 
 export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
@@ -27,7 +29,9 @@ export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
   homePointers = [],
   activeKeyCode = null,
   targetKeyIndex = null,
+  highlightKeyIndices = [],
 }) => {
+  const highlightSet = useMemo(() => new Set(highlightKeyIndices), [highlightKeyIndices]);
   const containerStyle: React.CSSProperties = useMemo(() => ({
     width: layout.width * unitSize,
     height: layout.height * unitSize,
@@ -43,7 +47,9 @@ export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
         const height = key.h * unitSize - gap;
         const isActive = activeKeyCode ? matchKLEKey(key.label, activeKeyCode) : false;
         
-        const isTarget = targetKeyIndex !== null && targetKeyIndex !== undefined ? index === targetKeyIndex : false;
+        const isTarget =
+          (targetKeyIndex !== null && targetKeyIndex !== undefined && index === targetKeyIndex) ||
+          highlightSet.has(index);
 
         let bg = key.c || '#333333';
         let tc = key.t || '#ffffff';
