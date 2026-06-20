@@ -96,13 +96,74 @@ export function computeHomography(src: Point[], dst: Point[]): HomographyMatrix 
   }
 }
 
+/** 3x3 行列 (row-major 9要素) の積 A·B。 */
+function mat3Mul(A: number[], B: number[]): number[] {
+  const C = new Array<number>(9).fill(0);
+  for (let i = 0; i < 3; i++) {
+    for (let j = 0; j < 3; j++) {
+      for (let k = 0; k < 3; k++) {
+        C[i * 3 + j] += A[i * 3 + k] * B[k * 3 + j];
+      }
+    }
+  }
+  return C;
+}
+
+/** 3x3 行列の逆行列。特異なら null。 */
+function mat3Inverse(m: number[]): number[] | null {
+  const [a, b, c, d, e, f, g, h, i] = m;
+  const det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+  if (Math.abs(det) < 1e-15) return null;
+  const id = 1 / det;
+  return [
+    (e * i - f * h) * id,
+    (c * h - b * i) * id,
+    (b * f - c * e) * id,
+    (f * g - d * i) * id,
+    (a * i - c * g) * id,
+    (c * d - a * f) * id,
+    (d * h - e * g) * id,
+    (b * g - a * h) * id,
+    (a * e - b * d) * id,
+  ];
+}
+
+/**
+ * Hartley 正規化行列を作る。点群を重心原点・平均距離 √2 にスケールする
+ * 相似変換 T を返し、正規化後の点も返す。
+ *
+ * これを掛けてから DLT を解くことで、正規方程式の悪条件 (横一行に
+ * 近い配置など) による解の暴れを劇的に抑える。
+ */
+function normalizationTransform(pts: Point[]): { T: number[]; normalized: Point[] } {
+  const n = pts.length;
+  let mx = 0;
+  let my = 0;
+  for (const p of pts) {
+    mx += p.x;
+    my += p.y;
+  }
+  mx /= n;
+  my /= n;
+
+  let meanDist = 0;
+  for (const p of pts) meanDist += Math.hypot(p.x - mx, p.y - my);
+  meanDist /= n;
+
+  const s = meanDist > 1e-12 ? Math.SQRT2 / meanDist : 1;
+  // T = scale(s) · translate(-mx, -my)
+  const T = [s, 0, -s * mx, 0, s, -s * my, 0, 0, 1];
+  const normalized = pts.map((p) => ({ x: s * (p.x - mx), y: s * (p.y - my) }));
+  return { T, normalized };
+}
+
 /**
  * Computes a homography from N >= 4 point correspondences using least squares.
  *
- * 4点ぴったりなら computeHomography と同じ解になるが、5点以上を渡すと
- * 過剰決定系を最小二乗 (normal equations: AᵀA x = Aᵀb) で解く。
- * キャリブレーションでホーム8指 + コーナー(QZP/) など多数の対応点を
- * 集約して安定した1枚の射影を得るために使用する。
+ * 4点ぴったりなら computeHomography と同等の解になるが、5点以上を渡すと
+ * 過剰決定系を最小二乗で解く。入力は Hartley 正規化してから DLT を解くため、
+ * ホーム1行＋縦アンカーのような平面的広がりに乏しい配置でも安定する。
+ * キャリブレーションでホーム8指 + コーナー(QZP/) を集約して使う。
  *
  * @param src カメラ画素座標の配列 (>= 4)
  * @param dst 対応する KLE 論理座標の配列 (>= 4, src と同数)
@@ -111,13 +172,17 @@ export function computeHomography(src: Point[], dst: Point[]): HomographyMatrix 
 export function computeHomographyLS(src: Point[], dst: Point[]): HomographyMatrix | null {
   if (src.length !== dst.length || src.length < 4) return null;
 
+  // 座標正規化 (悪条件対策)
+  const { T: Ts, normalized: srcN } = normalizationTransform(src);
+  const { T: Td, normalized: dstN } = normalizationTransform(dst);
+
   // 8 unknowns (h33 = 1 と固定)。各対応点が 2 本の方程式を与える。
   const rows: number[][] = [];
   const rhs: number[] = [];
 
-  for (let i = 0; i < src.length; i++) {
-    const { x, y } = src[i];
-    const { x: u, y: v } = dst[i];
+  for (let i = 0; i < srcN.length; i++) {
+    const { x, y } = srcN[i];
+    const { x: u, y: v } = dstN[i];
     rows.push([x, y, 1, 0, 0, 0, -u * x, -u * y]);
     rhs.push(u);
     rows.push([0, 0, 0, x, y, 1, -v * x, -v * y]);
@@ -142,7 +207,17 @@ export function computeHomographyLS(src: Point[], dst: Point[]): HomographyMatri
 
   try {
     const h = solveLinearSystem(ata, atb);
-    return [...h, 1];
+    const Hn = [...h, 1]; // 正規化空間でのホモグラフィ
+
+    // 元の座標系へ戻す: H = Td⁻¹ · Hn · Ts
+    const TdInv = mat3Inverse(Td);
+    if (!TdInv) return null;
+    const H = mat3Mul(TdInv, mat3Mul(Hn, Ts));
+
+    // h33 = 1 に再正規化
+    if (Math.abs(H[8]) < 1e-15) return null;
+    const scale = 1 / H[8];
+    return H.map((v) => v * scale);
   } catch (e) {
     console.error('Failed to compute least-squares homography', e);
     return null;
