@@ -48,9 +48,6 @@ interface CalibrationScreenProps {
  */
 type CalibrationPhase = 'select' | 'home' | 'corners' | 'complete';
 
-/** corners フェーズのサブステップ。 */
-type CornerStep = 'left' | 'right';
-
 /** キャプチャした1点 (カメラ画素座標 + 解決済みアンカー)。 */
 interface CapturedPoint {
   anchor: ResolvedAnchor;
@@ -58,26 +55,56 @@ interface CapturedPoint {
   camera: Point;
 }
 
-/**
- * MediaPipe の手データから、指定した手・指の指先をカメラ画素座標で取り出す。
- * ミラー時は x を反転して描画座標系に合わせる。
- */
-function fingertipScreenPoint(
-  hands: { landmarks: { x: number; y: number }[]; handedness: HandSide }[],
-  side: HandSide,
+type RawHand = { landmarks: { x: number; y: number }[] };
+
+/** 指先ランドマークをカメラ画素座標へ (ミラー補正込み)。 */
+function tipToScreen(
+  hand: RawHand,
   fingerLandmark: number,
   canvasW: number,
   canvasH: number,
   mirror: boolean
 ): Point | null {
-  const hand = hands.find((h) => h.handedness === side);
-  if (!hand) return null;
   const tip = hand.landmarks[fingerLandmark];
   if (!tip) return null;
   return {
     x: (mirror ? 1 - tip.x : tip.x) * canvasW,
     y: tip.y * canvasH,
   };
+}
+
+/**
+ * 検出された手をカメラ画面上のX位置で左右に割り当てる。
+ *
+ * 俯瞰カメラでは MediaPipe の handedness が不安定なため信頼しない。
+ * 代わりに手の代表点 (手首 landmark 0) の画面X座標でソートし、
+ * 左側の手 = ユーザーの左半分、右側の手 = 右半分として扱う。
+ * (ホーム配置・コーナーとも両手を画面の左右に置く前提なので頑健。)
+ *
+ * @returns { Left, Right } いずれも検出されなければ null
+ */
+function assignHandsByCameraX(
+  hands: RawHand[],
+  canvasW: number,
+  mirror: boolean
+): { Left: RawHand | null; Right: RawHand | null } {
+  const withX = hands
+    .map((h) => {
+      const wrist = h.landmarks[0];
+      const screenX = wrist ? (mirror ? 1 - wrist.x : wrist.x) * canvasW : 0;
+      return { hand: h, screenX };
+    })
+    .sort((a, b) => a.screenX - b.screenX);
+
+  if (withX.length === 0) return { Left: null, Right: null };
+  if (withX.length === 1) {
+    // 1手のみ: 画面中央より左なら左手とみなす
+    const single = withX[0];
+    return single.screenX < canvasW / 2
+      ? { Left: single.hand, Right: null }
+      : { Left: null, Right: single.hand };
+  }
+  return { Left: withX[0].hand, Right: withX[withX.length - 1].hand };
 }
 
 export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
@@ -99,7 +126,8 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
   const [modelError, setModelError] = useState<string | null>(null);
 
   const [phase, setPhase] = useState<CalibrationPhase>('select');
-  const [cornerStep, setCornerStep] = useState<CornerStep>('left');
+  // corners フェーズで今どのコーナーを記録中か (Q→Z→P→/ の index)。
+  const [cornerStep, setCornerStep] = useState(0);
 
   // Layout selection
   const [presetId, setPresetId] = useState<LayoutPresetId | 'custom'>('us-standard');
@@ -121,12 +149,9 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
 
   // 解決済みアンカー (KLE 座標つき)。レイアウト変更で再計算。
   const homeAnchors = useMemo(() => resolveAnchors(activeLayout, HOME_ANCHORS), [activeLayout]);
-  const leftCornerAnchors = useMemo(
-    () => resolveAnchors(activeLayout, LEFT_CORNER_ANCHORS),
-    [activeLayout]
-  );
-  const rightCornerAnchors = useMemo(
-    () => resolveAnchors(activeLayout, RIGHT_CORNER_ANCHORS),
+  // コーナーは小指で1キーずつ順に記録 (2キー同時押しは無理なため): Q→Z→P→/
+  const cornerAnchors = useMemo(
+    () => resolveAnchors(activeLayout, [...LEFT_CORNER_ANCHORS, ...RIGHT_CORNER_ANCHORS]),
     [activeLayout]
   );
 
@@ -137,8 +162,9 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
     capturedRef.current = captured;
   }, [captured]);
 
-  // ライブの指先座標 (描画ループから更新)
-  const latestHandsRef = useRef<{ landmarks: { x: number; y: number }[]; handedness: HandSide }[]>([]);
+  // ライブの手データ (描画ループから更新)。左右は handedness に頼らず
+  // captureAnchors 内でカメラX位置から判定するため、生の landmarks のみ保持。
+  const latestHandsRef = useRef<RawHand[]>([]);
 
   // プレビュー用の追従ポインタ
   const [previewPointers, setPreviewPointers] = useState<Point[]>([]);
@@ -243,18 +269,28 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
             const results = HandTracker.getInstance().detectForVideo(video, performance.now());
             lastVideoTime = video.currentTime;
 
-            const hands: { landmarks: { x: number; y: number }[]; handedness: HandSide }[] = [];
+            const hands: RawHand[] = [];
             const mappedPointersList: Point[] = [];
 
             if (results && results.landmarks && results.landmarks.length > 0) {
               const handsData = mapMediaPipeResults(results);
               for (const hand of handsData) {
-                hands.push({ landmarks: hand.landmarks, handedness: hand.handedness });
+                hands.push({ landmarks: hand.landmarks });
+              }
+
+              // 左右は handedness ではなくカメラX位置で判定し、色・プレビューを統一。
+              const sides = assignHandsByCameraX(hands, canvas.width, mirror);
+              const sideOf = (h: RawHand): HandSide =>
+                h === sides.Left ? 'Left' : h === sides.Right ? 'Right' : 'Left';
+
+              for (const hand of hands) {
+                const side = sideOf(hand);
+                const color = side === 'Left' ? '#00adb5' : '#ff007f';
 
                 drawingUtils?.drawConnectors(
                   hand.landmarks as NormalizedLandmark[],
                   HandLandmarker.HAND_CONNECTIONS,
-                  { color: hand.handedness === 'Left' ? '#00adb5' : '#ff007f', lineWidth: 2 }
+                  { color, lineWidth: 2 }
                 );
                 drawingUtils?.drawLandmarks(hand.landmarks as NormalizedLandmark[], {
                   color: '#ffffff',
@@ -268,7 +304,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
                   if (!tip) continue;
                   ctx.beginPath();
                   ctx.arc(tip.x * canvas.width, tip.y * canvas.height, 6, 0, 2 * Math.PI);
-                  ctx.fillStyle = hand.handedness === 'Left' ? '#00adb5' : '#ff007f';
+                  ctx.fillStyle = color;
                   ctx.fill();
                   ctx.strokeStyle = '#ffffff';
                   ctx.lineWidth = 1.5;
@@ -284,11 +320,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
                       y: indexTip.y * canvas.height,
                     };
                     mappedPointersList.push(
-                      applyCalibrationHomography(
-                        computedHomographyRef.current,
-                        screenPt,
-                        hand.handedness
-                      )
+                      applyCalibrationHomography(computedHomographyRef.current, screenPt, side)
                     );
                   }
                 }
@@ -361,17 +393,16 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
       const mirror = isMirroredRef.current;
       const hands = latestHandsRef.current;
 
+      // 左右は handedness ではなくカメラX位置で割り当てる (俯瞰カメラ対応)。
+      const sides = assignHandsByCameraX(hands, canvas.width, mirror);
+
       const result: CapturedPoint[] = [];
       const missing: string[] = [];
       for (const anchor of anchors) {
-        const pt = fingertipScreenPoint(
-          hands,
-          anchor.hand,
-          FINGERTIP_LANDMARK[anchor.finger],
-          canvas.width,
-          canvas.height,
-          mirror
-        );
+        const hand = anchor.hand === 'Left' ? sides.Left : sides.Right;
+        const pt = hand
+          ? tipToScreen(hand, FINGERTIP_LANDMARK[anchor.finger], canvas.width, canvas.height, mirror)
+          : null;
         if (!pt) {
           missing.push(anchor.display);
           continue;
@@ -380,10 +411,11 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
       }
 
       if (missing.length > 0) {
-        showToast(
-          `次の指が検知できませんでした: ${missing.join(' / ')}。両手をカメラに映してください。`,
-          'warning'
-        );
+        const hint =
+          anchors.length > 2
+            ? '両手をカメラに映してください。'
+            : `${anchors[0]?.hand === 'Left' ? '左手' : '右手'}をカメラに映してください。`;
+        showToast(`次の指が検知できませんでした: ${missing.join(' / ')}。${hint}`, 'warning');
         return null;
       }
       return result;
@@ -395,21 +427,22 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
     const pts = captureAnchors(homeAnchors);
     if (!pts) return;
     setCaptured(pts);
-    setCornerStep('left');
+    setCornerStep(0);
     setPhase('corners');
   }, [captureAnchors, homeAnchors]);
 
   const handleCaptureCorner = useCallback(() => {
-    const anchors = cornerStep === 'left' ? leftCornerAnchors : rightCornerAnchors;
-    const pts = captureAnchors(anchors);
+    const anchor = cornerAnchors[cornerStep];
+    if (!anchor) return;
+    const pts = captureAnchors([anchor]);
     if (!pts) return;
     setCaptured((prev) => [...prev, ...pts]);
-    if (cornerStep === 'left') {
-      setCornerStep('right');
-    } else {
+    if (cornerStep + 1 >= cornerAnchors.length) {
       setPhase('complete');
+    } else {
+      setCornerStep((prev) => prev + 1);
     }
-  }, [captureAnchors, cornerStep, leftCornerAnchors, rightCornerAnchors]);
+  }, [captureAnchors, cornerStep, cornerAnchors]);
 
   // キー押下でキャプチャ (任意キーで現フェーズのキャプチャを実行)
   const handlePhysicalKeyPress = useCallback(
@@ -433,7 +466,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
 
   const handleReset = useCallback(() => {
     setPhase('select');
-    setCornerStep('left');
+    setCornerStep(0);
     setCaptured([]);
     setDraggedPointIndex(null);
   }, []);
@@ -444,7 +477,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
       return;
     }
     setCaptured([]);
-    setCornerStep('left');
+    setCornerStep(0);
     setPhase('home');
   }, [presetId, uploadedData, showToast]);
 
@@ -537,15 +570,15 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
     reader.readAsText(file);
   };
 
-  // 仮想キーボード上でハイライトすべきキー (home: 8指 / corners: 該当2キー)
+  // 仮想キーボード上でハイライトすべきキー (home: 8指 / corners: 現在の1キー)
   const highlightKeyIndices = useMemo<number[]>(() => {
     const anchors =
       phase === 'home'
         ? homeAnchors
         : phase === 'corners'
-          ? cornerStep === 'left'
-            ? leftCornerAnchors
-            : rightCornerAnchors
+          ? cornerAnchors[cornerStep]
+            ? [cornerAnchors[cornerStep]]
+            : []
           : [];
     const indices: number[] = [];
     for (const a of anchors) {
@@ -557,7 +590,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
       if (idx >= 0) indices.push(idx);
     }
     return indices;
-  }, [phase, cornerStep, homeAnchors, leftCornerAnchors, rightCornerAnchors, activeLayout]);
+  }, [phase, cornerStep, homeAnchors, cornerAnchors, activeLayout]);
 
   const homePointers = useMemo<Point[]>(() => {
     if (phase !== 'complete' || !computedHomography) return [];
@@ -571,10 +604,10 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
     }
   }, [phase, computedHomography, captured]);
 
-  const cornerInstruction =
-    cornerStep === 'left'
-      ? '左手の小指で「Q」（上）と「Z」（下）を同時に押さえ、任意のキーまたは下のボタンで記録してください。'
-      : '右手の小指で「P」（上）と「/」（下）を同時に押さえ、任意のキーまたは下のボタンで記録してください。';
+  const currentCorner = cornerAnchors[cornerStep];
+  const cornerInstruction = currentCorner
+    ? `${currentCorner.hand === 'Left' ? '左手' : '右手'}の小指で「${currentCorner.display}」キーを押さえ、任意のキーまたは下のボタンで記録してください。`
+    : '';
 
   return (
     <div
@@ -826,10 +859,12 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
                   marginBottom: '0.5rem',
                 }}
               >
-                Step 3: 縦アンカー ({cornerStep === 'left' ? '1' : '2'} / 2)
+                Step 3: 縦アンカー ({cornerStep + 1} / {cornerAnchors.length})
               </div>
               <h2 style={{ fontSize: '1.4rem', margin: '0 0 1rem 0', fontWeight: 400 }}>
-                {cornerStep === 'left' ? '左手: Q と Z' : '右手: P と /'}
+                {currentCorner
+                  ? `${currentCorner.hand === 'Left' ? '左手' : '右手'}: ${currentCorner.display}`
+                  : ''}
               </h2>
               <p style={{ color: '#ccc', lineHeight: '1.6', fontSize: '1.05rem', margin: '0 0 1rem 0' }}>
                 {cornerInstruction}
@@ -849,7 +884,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
                   boxShadow: '0 4px 15px rgba(255, 0, 127, 0.4)',
                 }}
               >
-                {cornerStep === 'left' ? 'Q・Z を記録する' : 'P・/ を記録する'}
+                {currentCorner ? `${currentCorner.display} を記録する` : '記録する'}
               </button>
             </div>
           )}
