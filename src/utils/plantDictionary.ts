@@ -21,14 +21,14 @@ export const plantDictionary: PlantGroup[] = [
         species: [
           { level: 'species', japanese: 'セイヨウタンポポ', romaji: 'SEIYOUTANPOPO' },
           { level: 'species', japanese: 'カントウタンポポ', romaji: 'KANTOUTANPOPO' },
-          { level: 'species', japanese: 'シロバナタンポポ', romaji: 'SHIROBANATANPOPO' }
+          { level: 'species', japanese: 'シロバナタンポポ', romaji: 'SIROBANATANPOPO' }
         ]
       },
       {
         genus: { level: 'genus', japanese: 'キク属', romaji: 'KIKUZOKU' },
         species: [
           { level: 'species', japanese: 'リュウノウギク', romaji: 'RYUUNOUGIKU' },
-          { level: 'species', japanese: 'ノジギク', romaji: 'NOJIGIKU' }
+          { level: 'species', japanese: 'ノジギク', romaji: 'NOZIGIKU' }
         ]
       },
       {
@@ -53,7 +53,7 @@ export const plantDictionary: PlantGroup[] = [
       {
         genus: { level: 'genus', japanese: 'サクラ属', romaji: 'SAKURAZOKU' },
         species: [
-          { level: 'species', japanese: 'ソメイヨシノ', romaji: 'SOMEIYOSHINO' },
+          { level: 'species', japanese: 'ソメイヨシノ', romaji: 'SOMEIYOSINO' },
           { level: 'species', japanese: 'ヤマザクラ', romaji: 'YAMAZAKURA' },
           { level: 'species', japanese: 'ウメ', romaji: 'UME' },
           { level: 'species', japanese: 'モモ', romaji: 'MOMO' }
@@ -74,10 +74,10 @@ export const plantDictionary: PlantGroup[] = [
         ]
       },
       {
-        genus: { level: 'genus', japanese: 'キイチゴ属', romaji: 'KIICHIGOZOKU' },
+        genus: { level: 'genus', japanese: 'キイチゴ属', romaji: 'KIITIGOZOKU' },
         species: [
-          { level: 'species', japanese: 'モミジイチゴ', romaji: 'MOMIJIICHIGO' },
-          { level: 'species', japanese: 'クマイチゴ', romaji: 'KUMAICHIGO' }
+          { level: 'species', japanese: 'モミジイチゴ', romaji: 'MOMIZIITIGO' },
+          { level: 'species', japanese: 'クマイチゴ', romaji: 'KUMAITIGO' }
         ]
       }
     ]
@@ -88,15 +88,15 @@ export const plantDictionary: PlantGroup[] = [
       {
         genus: { level: 'genus', japanese: 'ナス属', romaji: 'NASUZOKU' },
         species: [
-          { level: 'species', japanese: 'ジャガイモ', romaji: 'JAGAIMO' },
+          { level: 'species', japanese: 'ジャガイモ', romaji: 'ZYAGAIMO' },
           { level: 'species', japanese: 'トマト', romaji: 'TOMATO' },
           { level: 'species', japanese: 'ナス', romaji: 'NASU' }
         ]
       },
       {
-        genus: { level: 'genus', japanese: 'トウガラシ属', romaji: 'TOUGARASHIZOKU' },
+        genus: { level: 'genus', japanese: 'トウガラシ属', romaji: 'TOUGARASIZOKU' },
         species: [
-          { level: 'species', japanese: 'トウガラシ', romaji: 'TOUGARASHI' },
+          { level: 'species', japanese: 'トウガラシ', romaji: 'TOUGARASI' },
           { level: 'species', japanese: 'ピーマン', romaji: 'PIIMAN' }
         ]
       },
@@ -109,14 +109,14 @@ export const plantDictionary: PlantGroup[] = [
     ]
   },
   {
-    family: { level: 'family', japanese: 'バショウ科', romaji: 'BASHOUKA' },
+    family: { level: 'family', japanese: 'バショウ科', romaji: 'BASYOUKA' },
     genuses: [
       {
-        genus: { level: 'genus', japanese: 'バショウ属', romaji: 'BASHOUZOKU' },
+        genus: { level: 'genus', japanese: 'バショウ属', romaji: 'BASYOUZOKU' },
         species: [
           { level: 'species', japanese: 'バナナ', romaji: 'BANANA' },
-          { level: 'species', japanese: 'バショウ', romaji: 'BASHOU' },
-          { level: 'species', japanese: 'リュウキュウバショウ', romaji: 'RYUUKYUUBASHOU' }
+          { level: 'species', japanese: 'バショウ', romaji: 'BASYOU' },
+          { level: 'species', japanese: 'リュウキュウバショウ', romaji: 'RYUUKYUUBASYOU' }
         ]
       }
     ]
@@ -140,13 +140,13 @@ export const plantDictionary: PlantGroup[] = [
         genus: { level: 'genus', japanese: 'タケ亜科', romaji: 'TAKEAKA' },
         species: [
           { level: 'species', japanese: 'マダケ', romaji: 'MADAKE' },
-          { level: 'species', japanese: 'モウソウチク', romaji: 'MOUSOUCHIKU' }
+          { level: 'species', japanese: 'モウソウチク', romaji: 'MOUSOUTIKU' }
         ]
       },
       {
-        genus: { level: 'genus', japanese: 'トウモロコシ属', romaji: 'TOUMOROKOSHIZOKU' },
+        genus: { level: 'genus', japanese: 'トウモロコシ属', romaji: 'TOUMOROKOSIZOKU' },
         species: [
-          { level: 'species', japanese: 'トウモロコシ', romaji: 'TOUMOROKOSHI' }
+          { level: 'species', japanese: 'トウモロコシ', romaji: 'TOUMOROKOSI' }
         ]
       }
     ]
@@ -162,9 +162,9 @@ export const plantDictionary: PlantGroup[] = [
         ]
       },
       {
-        genus: { level: 'genus', japanese: 'フジ属', romaji: 'FUJIZOKU' },
+        genus: { level: 'genus', japanese: 'フジ属', romaji: 'HUZIZOKU' },
         species: [
-          { level: 'species', japanese: 'ノダフジ', romaji: 'NODAFUJI' }
+          { level: 'species', japanese: 'ノダフジ', romaji: 'NODAHUZI' }
         ]
       },
       {
@@ -181,7 +181,7 @@ export const plantDictionary: PlantGroup[] = [
       {
         genus: { level: 'genus', japanese: 'アブラナ属', romaji: 'ABURANAZOKU' },
         species: [
-          { level: 'species', japanese: 'キャベツ', romaji: 'KYABETSU' },
+          { level: 'species', japanese: 'キャベツ', romaji: 'KYABETU' },
           { level: 'species', japanese: 'ハクサイ', romaji: 'HAKUSAI' },
           { level: 'species', japanese: 'ブロッコリー', romaji: 'BUROKKORII' }
         ]
@@ -217,9 +217,9 @@ export const plantDictionary: PlantGroup[] = [
         ]
       },
       {
-        genus: { level: 'genus', japanese: 'カボチャ属', romaji: 'KABOCHAZOKU' },
+        genus: { level: 'genus', japanese: 'カボチャ属', romaji: 'KABOTYAZOKU' },
         species: [
-          { level: 'species', japanese: 'カボチャ', romaji: 'KABOCHA' }
+          { level: 'species', japanese: 'カボチャ', romaji: 'KABOTYA' }
         ]
       }
     ]
@@ -235,9 +235,9 @@ export const plantDictionary: PlantGroup[] = [
         ]
       },
       {
-        genus: { level: 'genus', japanese: 'チューリップ属', romaji: 'CHUURIPPUZOKU' },
+        genus: { level: 'genus', japanese: 'チューリップ属', romaji: 'TYUURIPPUZOKU' },
         species: [
-          { level: 'species', japanese: 'チューリップ', romaji: 'CHUURIPPU' }
+          { level: 'species', japanese: 'チューリップ', romaji: 'TYUURIPPU' }
         ]
       }
     ]
@@ -250,7 +250,7 @@ export const plantDictionary: PlantGroup[] = [
         species: [
           { level: 'species', japanese: 'コナラ', romaji: 'KONARA' },
           { level: 'species', japanese: 'クヌギ', romaji: 'KUNUGI' },
-          { level: 'species', japanese: 'シラカシ', romaji: 'SHIRAKASHI' }
+          { level: 'species', japanese: 'シラカシ', romaji: 'SIRAKASI' }
         ]
       },
       {
@@ -268,13 +268,13 @@ export const plantDictionary: PlantGroup[] = [
     ]
   },
   {
-    family: { level: 'family', japanese: 'マツ科', romaji: 'MATSUKA' },
+    family: { level: 'family', japanese: 'マツ科', romaji: 'MATUKA' },
     genuses: [
       {
-        genus: { level: 'genus', japanese: 'マツ属', romaji: 'MATSUZOKU' },
+        genus: { level: 'genus', japanese: 'マツ属', romaji: 'MATUZOKU' },
         species: [
-          { level: 'species', japanese: 'アカマツ', romaji: 'AKAMATSU' },
-          { level: 'species', japanese: 'クロマツ', romaji: 'KUROMATSU' }
+          { level: 'species', japanese: 'アカマツ', romaji: 'AKAMATU' },
+          { level: 'species', japanese: 'クロマツ', romaji: 'KUROMATU' }
         ]
       },
       {
@@ -289,15 +289,88 @@ export const plantDictionary: PlantGroup[] = [
     family: { level: 'family', japanese: 'ラン科', romaji: 'RANKA' },
     genuses: [
       {
-        genus: { level: 'genus', japanese: 'シュンラン属', romaji: 'SHUNRANZOKU' },
+        genus: { level: 'genus', japanese: 'シュンラン属', romaji: 'SYUNRANZOKU' },
         species: [
-          { level: 'species', japanese: 'シュンラン', romaji: 'SHUNRAN' }
+          { level: 'species', japanese: 'シュンラン', romaji: 'SYUNRAN' }
         ]
       },
       {
         genus: { level: 'genus', japanese: 'セッコク属', romaji: 'SEKKOKUZOKU' },
         species: [
           { level: 'species', japanese: 'セッコク', romaji: 'SEKKOKU' }
+        ]
+      }
+    ]
+  },
+  {
+    family: { level: 'family', japanese: 'ツバキ科', romaji: 'TUBAKIKA' },
+    genuses: [
+      {
+        genus: { level: 'genus', japanese: 'ツバキ属', romaji: 'TUBAKIZOKU' },
+        species: [
+          { level: 'species', japanese: 'ヤブツバキ', romaji: 'YABUTUBAKI' },
+          { level: 'species', japanese: 'サザンカ', romaji: 'SAZANKA' },
+          { level: 'species', japanese: 'チャノキ', romaji: 'TYANOKI' }
+        ]
+      }
+    ]
+  },
+  {
+    family: { level: 'family', japanese: 'カエデ科', romaji: 'KAEDEKA' },
+    genuses: [
+      {
+        genus: { level: 'genus', japanese: 'カエデ属', romaji: 'KAEDEZOKU' },
+        species: [
+          { level: 'species', japanese: 'イロハモミジ', romaji: 'IROHAMOMIZI' },
+          { level: 'species', japanese: 'ハウチワカエデ', romaji: 'HAUTIWAKAEDE' }
+        ]
+      }
+    ]
+  },
+  {
+    family: { level: 'family', japanese: 'シソ科', romaji: 'SISOKA' },
+    genuses: [
+      {
+        genus: { level: 'genus', japanese: 'シソ属', romaji: 'SISOZOKU' },
+        species: [
+          { level: 'species', japanese: 'シソ', romaji: 'SISO' },
+          { level: 'species', japanese: 'エゴマ', romaji: 'EGOMA' }
+        ]
+      },
+      {
+        genus: { level: 'genus', japanese: 'ハッカ属', romaji: 'HAKKAZOKU' },
+        species: [
+          { level: 'species', japanese: 'ハッカ', romaji: 'HAKKA' },
+          { level: 'species', japanese: 'セイヨウハッカ', romaji: 'SEIYOUHAKKA' }
+        ]
+      },
+      {
+        genus: { level: 'genus', japanese: 'ラベンダー属', romaji: 'RABENDAAZOKU' },
+        species: [
+          { level: 'species', japanese: 'ラベンダー', romaji: 'RABENDAA' }
+        ]
+      }
+    ]
+  },
+  {
+    family: { level: 'family', japanese: 'ヒルガオ科', romaji: 'HIRUGAOKA' },
+    genuses: [
+      {
+        genus: { level: 'genus', japanese: 'サツマイモ属', romaji: 'SATUMAIMOZOKU' },
+        species: [
+          { level: 'species', japanese: 'サツマイモ', romaji: 'SATUMAIMO' },
+          { level: 'species', japanese: 'アサガオ', romaji: 'ASAGAO' }
+        ]
+      }
+    ]
+  },
+  {
+    family: { level: 'family', japanese: 'スギ科', romaji: 'SUGIKA' },
+    genuses: [
+      {
+        genus: { level: 'genus', japanese: 'スギ属', romaji: 'SUGIZOKU' },
+        species: [
+          { level: 'species', japanese: 'スギ', romaji: 'SUGI' }
         ]
       }
     ]
@@ -366,4 +439,159 @@ export function getFlatPracticeList(
   }
 
   return list;
+}
+
+/* ------------------------------------------------------------------ *
+ * Practice categories
+ *
+ * The trainer matches keystrokes against `node.romaji` (uppercase A-Z),
+ * so every category exposes the same `{ node, path }` shape that the
+ * plant dictionary produces. Beyond plants we offer:
+ *
+ *   - programmer:  English coding keywords (PRINT, RETURN, FUNCTION...).
+ *                  `japanese` holds a friendly meaning label, `romaji`
+ *                  is the literal keyword to type.
+ *   - beginner:    早期レベル。あいうえお〜やさしい単語をローマ字で。
+ *                  `japanese` はひらがな表示、`romaji` は打鍵対象。
+ * ------------------------------------------------------------------ */
+
+export type PracticeCategory = 'plant' | 'programmer' | 'beginner';
+
+export interface PracticeEntry {
+  node: PlantNode;
+  path: string;
+}
+
+/** A flat word: japanese=表示ラベル, romaji=打鍵対象(大文字A-Z), path=補足. */
+interface FlatWord {
+  japanese: string;
+  romaji: string;
+  path: string;
+}
+
+const programmerWords: FlatWord[] = [
+  // 基本コマンド
+  { japanese: '表示する', romaji: 'PRINT', path: 'きほんコマンド' },
+  { japanese: '返す', romaji: 'RETURN', path: 'きほんコマンド' },
+  { japanese: '関数', romaji: 'FUNCTION', path: 'きほんコマンド' },
+  { japanese: '変数', romaji: 'VARIABLE', path: 'きほんコマンド' },
+  { japanese: '定数', romaji: 'CONST', path: 'きほんコマンド' },
+  { japanese: '読み込む', romaji: 'IMPORT', path: 'きほんコマンド' },
+  { japanese: '書き出す', romaji: 'EXPORT', path: 'きほんコマンド' },
+  { japanese: 'もし', romaji: 'IF', path: '制御' },
+  { japanese: 'そうでなければ', romaji: 'ELSE', path: '制御' },
+  { japanese: '繰り返す', romaji: 'FOR', path: '制御' },
+  { japanese: '〜の間', romaji: 'WHILE', path: '制御' },
+  { japanese: '抜ける', romaji: 'BREAK', path: '制御' },
+  { japanese: '続ける', romaji: 'CONTINUE', path: '制御' },
+  { japanese: '真', romaji: 'TRUE', path: '値' },
+  { japanese: '偽', romaji: 'FALSE', path: '値' },
+  { japanese: '空', romaji: 'NULL', path: '値' },
+  { japanese: '配列', romaji: 'ARRAY', path: 'データ' },
+  { japanese: '文字列', romaji: 'STRING', path: 'データ' },
+  { japanese: '数値', romaji: 'NUMBER', path: 'データ' },
+  { japanese: 'オブジェクト', romaji: 'OBJECT', path: 'データ' },
+  { japanese: 'クラス', romaji: 'CLASS', path: 'データ' },
+  // 道具・概念
+  { japanese: 'コード', romaji: 'CODE', path: 'がいねん' },
+  { japanese: 'バグ', romaji: 'BUG', path: 'がいねん' },
+  { japanese: 'デバッグ', romaji: 'DEBUG', path: 'がいねん' },
+  { japanese: 'コンパイル', romaji: 'COMPILE', path: 'がいねん' },
+  { japanese: 'サーバー', romaji: 'SERVER', path: 'がいねん' },
+  { japanese: 'データ', romaji: 'DATA', path: 'がいねん' },
+  { japanese: 'ファイル', romaji: 'FILE', path: 'がいねん' },
+  { japanese: 'キー', romaji: 'KEY', path: 'がいねん' },
+  { japanese: '値', romaji: 'VALUE', path: 'がいねん' },
+  { japanese: 'ループ', romaji: 'LOOP', path: 'がいねん' }
+];
+
+const beginnerWords: FlatWord[] = [
+  // あ行 〜 文字をひとつずつ
+  { japanese: 'あ', romaji: 'A', path: 'あいうえお' },
+  { japanese: 'い', romaji: 'I', path: 'あいうえお' },
+  { japanese: 'う', romaji: 'U', path: 'あいうえお' },
+  { japanese: 'え', romaji: 'E', path: 'あいうえお' },
+  { japanese: 'お', romaji: 'O', path: 'あいうえお' },
+  { japanese: 'か', romaji: 'KA', path: 'かきくけこ' },
+  { japanese: 'き', romaji: 'KI', path: 'かきくけこ' },
+  { japanese: 'く', romaji: 'KU', path: 'かきくけこ' },
+  { japanese: 'け', romaji: 'KE', path: 'かきくけこ' },
+  { japanese: 'こ', romaji: 'KO', path: 'かきくけこ' },
+  { japanese: 'さ', romaji: 'SA', path: 'さしすせそ' },
+  { japanese: 'し', romaji: 'SI', path: 'さしすせそ' },
+  { japanese: 'す', romaji: 'SU', path: 'さしすせそ' },
+  { japanese: 'せ', romaji: 'SE', path: 'さしすせそ' },
+  { japanese: 'そ', romaji: 'SO', path: 'さしすせそ' },
+  { japanese: 'た', romaji: 'TA', path: 'たちつてと' },
+  { japanese: 'て', romaji: 'TE', path: 'たちつてと' },
+  { japanese: 'と', romaji: 'TO', path: 'たちつてと' },
+  { japanese: 'な', romaji: 'NA', path: 'なにぬねの' },
+  { japanese: 'ね', romaji: 'NE', path: 'なにぬねの' },
+  { japanese: 'の', romaji: 'NO', path: 'なにぬねの' },
+  { japanese: 'は', romaji: 'HA', path: 'はひふへほ' },
+  { japanese: 'ひ', romaji: 'HI', path: 'はひふへほ' },
+  { japanese: 'ま', romaji: 'MA', path: 'まみむめも' },
+  { japanese: 'み', romaji: 'MI', path: 'まみむめも' },
+  { japanese: 'め', romaji: 'ME', path: 'まみむめも' },
+  { japanese: 'や', romaji: 'YA', path: 'やゆよ' },
+  { japanese: 'ゆ', romaji: 'YU', path: 'やゆよ' },
+  { japanese: 'よ', romaji: 'YO', path: 'やゆよ' },
+  { japanese: 'ら', romaji: 'RA', path: 'らりるれろ' },
+  { japanese: 'り', romaji: 'RI', path: 'らりるれろ' },
+  { japanese: 'わ', romaji: 'WA', path: 'わをん' },
+  // やさしい たんご
+  { japanese: 'あお', romaji: 'AO', path: 'やさしいことば' },
+  { japanese: 'あか', romaji: 'AKA', path: 'やさしいことば' },
+  { japanese: 'いぬ', romaji: 'INU', path: 'やさしいことば' },
+  { japanese: 'ねこ', romaji: 'NEKO', path: 'やさしいことば' },
+  { japanese: 'うみ', romaji: 'UMI', path: 'やさしいことば' },
+  { japanese: 'そら', romaji: 'SORA', path: 'やさしいことば' },
+  { japanese: 'はな', romaji: 'HANA', path: 'やさしいことば' },
+  { japanese: 'やま', romaji: 'YAMA', path: 'やさしいことば' },
+  { japanese: 'みず', romaji: 'MIZU', path: 'やさしいことば' },
+  { japanese: 'ほし', romaji: 'HOSI', path: 'やさしいことば' },
+  { japanese: 'つき', romaji: 'TUKI', path: 'やさしいことば' },
+  { japanese: 'たいよう', romaji: 'TAIYOU', path: 'やさしいことば' }
+];
+
+function toEntries(words: FlatWord[], options: { shuffle?: boolean }): PracticeEntry[] {
+  const list: PracticeEntry[] = words.map(w => ({
+    node: { level: 'species', japanese: w.japanese, romaji: w.romaji },
+    path: w.path
+  }));
+
+  if (options.shuffle) {
+    for (let i = list.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [list[i], list[j]] = [list[j], list[i]];
+    }
+  }
+
+  return list;
+}
+
+/** Human-readable labels for the category selector UI. */
+export const practiceCategoryLabels: Record<PracticeCategory, string> = {
+  plant: '🌱 植物の名前',
+  programmer: '💻 プログラマー',
+  beginner: 'あ 初級（あいうえお）'
+};
+
+/**
+ * Unified accessor used by the trainer. Returns the practice list for the
+ * requested category, all sharing the `{ node, path }` shape.
+ */
+export function getPracticeList(
+  category: PracticeCategory,
+  options: { shuffle?: boolean } = {}
+): PracticeEntry[] {
+  switch (category) {
+    case 'programmer':
+      return toEntries(programmerWords, options);
+    case 'beginner':
+      return toEntries(beginnerWords, options);
+    case 'plant':
+    default:
+      return getFlatPracticeList(options);
+  }
 }

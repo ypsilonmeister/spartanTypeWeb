@@ -7,7 +7,8 @@ import { CameraSourceSelector } from '../camera/CameraSourceSelector';
 import { TypingEngine } from '../../utils/TypingEngine';
 import type { UnanalyzedSessionData, SessionData, FrameLog } from '../../utils/TypingEngine';
 import { useWorker } from '../../hooks/useWorker';
-import { getFlatPracticeList } from '../../utils/plantDictionary';
+import { getPracticeList, practiceCategoryLabels } from '../../utils/plantDictionary';
+import type { PracticeCategory } from '../../utils/plantDictionary';
 import { mapMediaPipeResults } from '../../utils/mediapipeUtils';
 import '../../styles/cameraPreview.css';
 import '../../styles/trainer.css';
@@ -64,11 +65,25 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
   }
   const [realtimeFeedback, setRealtimeFeedback] = useState<RealtimeFeedback | null>(null);
 
-  // Typing practice states based on Plant Dictionary
-  const practiceList = useMemo(() => getFlatPracticeList({ shuffle: true }), []);
+  // Typing practice states. Category selects which dictionary to drill.
+  const [practiceCategory, setPracticeCategory] = useState<PracticeCategory>(() => {
+    const saved = localStorage.getItem('spartan_practice_category');
+    return (saved === 'programmer' || saved === 'beginner') ? saved : 'plant';
+  });
+  const practiceList = useMemo(
+    () => getPracticeList(practiceCategory, { shuffle: true }),
+    [practiceCategory]
+  );
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
   const [flashError, setFlashError] = useState(false);
+
+  const handleSetPracticeCategory = (category: PracticeCategory) => {
+    setPracticeCategory(category);
+    localStorage.setItem('spartan_practice_category', category);
+    setCurrentWordIndex(0);
+    setCurrentCharIndex(0);
+  };
 
   const handleKeyPress = useCallback((code: string, keystrokeIndex: number) => {
     setPressedKeyCode(code);
@@ -347,6 +362,25 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
               onRestart={restartRemote}
             />
           )}
+
+          {/* Practice Category Selector */}
+          <div className="trainer-mode-selector">
+            <label className="trainer-mode-label">
+              練習カテゴリ
+            </label>
+            <div className="trainer-category-toggle">
+              {(Object.keys(practiceCategoryLabels) as PracticeCategory[]).map(cat => (
+                <button
+                  key={cat}
+                  disabled={isRecording}
+                  onClick={() => handleSetPracticeCategory(cat)}
+                  className={`trainer-category-btn${practiceCategory === cat ? ' is-active' : ''}`}
+                >
+                  {practiceCategoryLabels[cat]}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* Mode Selector */}
           <div className="trainer-mode-selector">
