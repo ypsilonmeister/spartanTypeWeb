@@ -3,6 +3,7 @@ import type { UnanalyzedSessionData, SessionData } from '../../utils/TypingEngin
 import { TypingEngine } from '../../utils/TypingEngine';
 import { useWorker } from '../../hooks/useWorker';
 import { mapMediaPipeResults } from '../../utils/mediapipeUtils';
+import type { MediaPipeHandResult } from '../../utils/mediapipeUtils';
 import type { KeyboardLayout } from '../../types/kle';
 
 interface AnalysisPhaseProps {
@@ -11,9 +12,101 @@ interface AnalysisPhaseProps {
   onAnalysisComplete: (data: SessionData) => void;
 }
 
-type VideoWithCallback = HTMLVideoElement & {
-  requestVideoFrameCallback: (callback: (now: number, metadata: Record<string, unknown>) => void) => number;
-};
+type DetectResponse =
+  | { type: 'DETECT_RESULT'; results?: MediaPipeHandResult; timestamp: number; requestId: string }
+  | { type: 'DETECT_ERROR'; error: string; timestamp: number; requestId: string };
+
+const MIN_FRAME_GAP_MS = 40;
+const DETECTION_TIMEOUT_MS = 15000;
+
+function buildTargetFrameTimes(keystrokes: UnanalyzedSessionData['keystrokes'], durationMs: number): number[] {
+  const sorted = keystrokes
+    .map((ks) => Math.min(Math.max(ks.timestamp, 0), Math.max(durationMs - 1, 0)))
+    .sort((a, b) => a - b);
+
+  const targets: number[] = [];
+  for (const timestamp of sorted) {
+    const previous = targets[targets.length - 1];
+    if (previous === undefined || timestamp - previous >= MIN_FRAME_GAP_MS) {
+      targets.push(timestamp);
+    }
+  }
+  return targets;
+}
+
+function waitForVideoEvent(video: HTMLVideoElement, eventName: 'loadedmetadata' | 'seeked'): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      video.removeEventListener(eventName, handleEvent);
+      video.removeEventListener('error', handleError);
+    };
+    const handleEvent = () => {
+      cleanup();
+      resolve();
+    };
+    const handleError = () => {
+      cleanup();
+      reject(new Error(`Video ${eventName} failed.`));
+    };
+    video.addEventListener(eventName, handleEvent, { once: true });
+    video.addEventListener('error', handleError, { once: true });
+  });
+}
+
+async function seekVideo(video: HTMLVideoElement, seconds: number): Promise<void> {
+  const maxTime = Number.isFinite(video.duration) ? Math.max(video.duration - 0.001, 0) : seconds;
+  const target = Math.min(Math.max(seconds, 0), maxTime);
+
+  video.pause();
+  if (Math.abs(video.currentTime - target) < 0.004 && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    return;
+  }
+
+  const seeked = waitForVideoEvent(video, 'seeked');
+  video.currentTime = target;
+  await seeked;
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+function detectFrame(
+  worker: Worker,
+  bitmap: ImageBitmap,
+  timestamp: number,
+  requestId: string
+): Promise<DetectResponse> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      cleanup();
+      reject(new Error(`Hand detection timed out for frame ${requestId}.`));
+    }, DETECTION_TIMEOUT_MS);
+
+    const cleanup = () => {
+      window.clearTimeout(timeoutId);
+      worker.removeEventListener('message', handleMessage);
+    };
+
+    const handleMessage = (e: MessageEvent) => {
+      const data = e.data as Partial<DetectResponse>;
+      if (data.requestId !== requestId) return;
+      cleanup();
+      if (data.type === 'DETECT_ERROR') {
+        reject(new Error(data.error));
+      } else {
+        resolve(data as DetectResponse);
+      }
+    };
+
+    worker.addEventListener('message', handleMessage);
+    try {
+      worker.postMessage({ type: 'DETECT', image: bitmap, timestamp, requestId }, [bitmap]);
+    } catch (err) {
+      cleanup();
+      bitmap.close();
+      reject(err);
+    }
+  });
+}
 
 export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, layout, onAnalysisComplete }) => {
   const { worker, isWorkerReady, workerError } = useWorker();
@@ -31,6 +124,7 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
       const dummyEngine = new TypingEngine(layout, unanalyzedData.homography);
       dummyEngine.loadKeystrokes(unanalyzedData.keystrokes);
       const jsonStr = dummyEngine.exportSession();
+      dummyEngine.destroy();
       onAnalysisComplete(JSON.parse(jsonStr));
       return;
     }
@@ -41,141 +135,122 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
 
+    let cancelled = false;
     const url = URL.createObjectURL(unanalyzedData.blob);
-    video.src = url;
 
-    video.onloadeddata = () => {
-      console.log(`[Analysis] Video metadata loaded. Resolution: ${video.videoWidth}x${video.videoHeight}, Duration: ${video.duration.toFixed(2)}s`);
-      video.width = video.videoWidth;
-      video.height = video.videoHeight;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      
-      setStatus('Analyzing frames...');
-      
+    const runTargetedAnalysis = async () => {
       const dummyEngine = new TypingEngine(layout, unanalyzedData.homography);
-      dummyEngine.startSession(); 
-      
-      let pendingFrames = 0;
-      let lastProcessedTime = -1;
-      let frameCounter = 0;
-      let isFinalized = false;
-      let finalizeRetryCount = 0;
-      const FINALIZE_MAX_RETRIES = 100; // 最大 10 秒待機
-
-      const handleWorkerMessage = (e: MessageEvent) => {
-        if (e.data.type === 'DETECT_RESULT') {
-          pendingFrames--;
-          const { results, timestamp } = e.data;
-          
-          frameCounter++;
-          if (frameCounter % 30 === 0) {
-            console.log(`[Analysis] Processed ${frameCounter} frames. Video Time: ${video.currentTime.toFixed(2)}s / ${video.duration.toFixed(2)}s. Queue: ${pendingFrames}`);
-          }
-          
-          if (results && results.landmarks && results.landmarks.length > 0) {
-            const handsData = mapMediaPipeResults(results);
-            dummyEngine.processFrame(
-              handsData,
-              timestamp,
-              canvas.width,
-              canvas.height,
-              unanalyzedData.isMirrored ?? true
-            );
-          } else {
-             dummyEngine.processFrame(
-               [],
-               timestamp,
-               canvas.width,
-               canvas.height,
-               unanalyzedData.isMirrored ?? true
-             );
-          }
-        } else if (e.data.type === 'DETECT_ERROR') {
-          pendingFrames--;
-          console.error('[Analysis] Worker detection frame error:', e.data.error);
+      let engineDestroyed = false;
+      const destroyEngine = () => {
+        if (!engineDestroyed) {
+          dummyEngine.destroy();
+          engineDestroyed = true;
         }
       };
 
-      worker.addEventListener('message', handleWorkerMessage);
-
-      const finalize = () => {
-        if (isFinalized) return;
-        if (pendingFrames > 0 && finalizeRetryCount < FINALIZE_MAX_RETRIES) {
-          finalizeRetryCount++;
-          console.log(`[Analysis] Finalizing queued. Waiting for ${pendingFrames} pending frames to resolve... (retry ${finalizeRetryCount}/${FINALIZE_MAX_RETRIES})`);
-          setTimeout(finalize, 100);
+      try {
+        const metadataLoaded = waitForVideoEvent(video, 'loadedmetadata');
+        video.src = url;
+        video.load();
+        await metadataLoaded;
+        if (cancelled) {
+          destroyEngine();
           return;
         }
-        if (pendingFrames > 0) {
-          console.warn(`[Analysis] Timed out waiting for ${pendingFrames} pending frames. Proceeding with available data.`);
+
+        console.log(`[Analysis] Video metadata loaded. Resolution: ${video.videoWidth}x${video.videoHeight}, Duration: ${video.duration.toFixed(2)}s`);
+        video.width = video.videoWidth;
+        video.height = video.videoHeight;
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          throw new Error('Could not create analysis canvas context.');
         }
-        isFinalized = true;
-        
-        worker.removeEventListener('message', handleWorkerMessage);
-        video.removeEventListener('ended', handleVideoEnded);
-        URL.revokeObjectURL(url);
-        
+
+        const durationMs = Number.isFinite(video.duration)
+          ? video.duration * 1000
+          : Math.max(0, ...unanalyzedData.keystrokes.map((ks) => ks.timestamp));
+        const targetTimes = buildTargetFrameTimes(unanalyzedData.keystrokes, durationMs);
+
+        dummyEngine.startSession();
+        if (targetTimes.length === 0) {
+          setProgress(100);
+        } else {
+          setStatus(`Analyzing ${targetTimes.length} key frames...`);
+        }
+
+        for (let i = 0; i < targetTimes.length; i++) {
+          if (cancelled) {
+            destroyEngine();
+            return;
+          }
+          const timestamp = targetTimes[i];
+          await seekVideo(video, timestamp / 1000);
+          if (cancelled) {
+            destroyEngine();
+            return;
+          }
+
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const bitmap = await createImageBitmap(canvas);
+          let handsData: ReturnType<typeof mapMediaPipeResults> = [];
+          try {
+            const response = await detectFrame(worker, bitmap, timestamp, `post-session-${Date.now()}-${i}`);
+            handsData = response.type === 'DETECT_RESULT'
+              ? mapMediaPipeResults(response.results)
+              : [];
+          } catch (err) {
+            console.error('[Analysis] Worker detection frame error:', err);
+          }
+
+          dummyEngine.processFrame(
+            handsData,
+            timestamp,
+            canvas.width,
+            canvas.height,
+            unanalyzedData.isMirrored ?? true
+          );
+
+          if ((i + 1) % 30 === 0) {
+            console.log(`[Analysis] Processed ${i + 1} / ${targetTimes.length} targeted frames.`);
+          }
+          setProgress(((i + 1) / targetTimes.length) * 100);
+        }
+
+        if (cancelled) {
+          destroyEngine();
+          return;
+        }
         setStatus('Finalizing session data...');
-        console.log(`[Analysis] Frame processing complete. Total analyzed frames: ${frameCounter}. Exporting session JSON...`);
+        console.log(`[Analysis] Targeted frame processing complete. Total analyzed frames: ${targetTimes.length}. Exporting session JSON...`);
         dummyEngine.loadKeystrokes(unanalyzedData.keystrokes);
         const finalJson = dummyEngine.exportSession();
+        destroyEngine();
+        URL.revokeObjectURL(url);
         onAnalysisComplete(JSON.parse(finalJson));
-      };
-
-      const handleVideoEnded = () => {
-        console.log("[Analysis] Video ended event fired. Finalizing...");
-        finalize();
-      };
-
-      video.addEventListener('ended', handleVideoEnded);
-
-      // Play back fast for analysis
-      video.playbackRate = 1.0; 
-      video.play();
-      console.log("[Analysis] Video playback started.");
-
-      const processVideoFrame = () => {
-        if (video.paused || video.ended) {
-          finalize();
-          return;
+      } catch (err) {
+        destroyEngine();
+        URL.revokeObjectURL(url);
+        if (!cancelled) {
+          console.error('[Analysis] Targeted analysis failed:', err);
+          setStatus(err instanceof Error ? err.message : 'Failed to analyze recorded video.');
         }
-
-        if (video.currentTime !== lastProcessedTime && pendingFrames < 2) {
-          lastProcessedTime = video.currentTime;
-          
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            createImageBitmap(canvas).then(bitmap => {
-              pendingFrames++;
-              const timestamp = video.currentTime * 1000;
-              worker.postMessage({ type: 'DETECT', image: bitmap, timestamp }, [bitmap]);
-            }).catch(err => console.error("[Analysis] Bitmap creation failed:", err));
-          }
-        }
-        
-        setProgress((video.currentTime / video.duration) * 100);
-        
-        if ('requestVideoFrameCallback' in video) {
-           (video as VideoWithCallback).requestVideoFrameCallback(processVideoFrame);
-        } else {
-           requestAnimationFrame(processVideoFrame);
-        }
-      };
-      
-      if ('requestVideoFrameCallback' in video) {
-         (video as VideoWithCallback).requestVideoFrameCallback(processVideoFrame);
-      } else {
-         requestAnimationFrame(processVideoFrame);
       }
     };
+
+    runTargetedAnalysis();
 
     video.onerror = (e) => {
       console.error("[Analysis] Video playback error:", e);
       setStatus('Failed to load recorded video.');
     };
 
+    return () => {
+      cancelled = true;
+      URL.revokeObjectURL(url);
+    };
   }, [isWorkerReady, worker, unanalyzedData, layout, onAnalysisComplete]);
 
   return (

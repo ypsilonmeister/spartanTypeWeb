@@ -34,7 +34,7 @@ async function initLandmarker() {
 }
 
 self.onmessage = (e: MessageEvent) => {
-  const { type, image, timestamp, keystrokeIndex } = e.data;
+  const { type, image, timestamp, keystrokeIndex, requestId } = e.data;
 
   if (type === 'INIT') {
     initLandmarker();
@@ -45,10 +45,10 @@ self.onmessage = (e: MessageEvent) => {
       // Post results back to main thread.
       // keystrokeIndex はリアルタイム解析で送られてきた場合のみ存在し、
       // 応答をトリガーとなったキーストロークへ確実に対応付けるために echo back する。
-      self.postMessage({ type: 'DETECT_RESULT', results, timestamp, keystrokeIndex });
+      self.postMessage({ type: 'DETECT_RESULT', results, timestamp, keystrokeIndex, requestId });
     } catch (err) {
       console.error('Worker detection error:', err);
-      self.postMessage({ type: 'DETECT_ERROR', error: String(err), timestamp, keystrokeIndex });
+      self.postMessage({ type: 'DETECT_ERROR', error: String(err), timestamp, keystrokeIndex, requestId });
     } finally {
       // Ensure we don't leak ImageBitmaps
       if (image && typeof image.close === 'function') {
