@@ -15,6 +15,8 @@ type VideoWithCallback = HTMLVideoElement & {
   requestVideoFrameCallback: (callback: (now: number, metadata: Record<string, unknown>) => void) => number;
 };
 
+const ANALYSIS_PLAYBACK_RATE = 3;
+
 export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, layout, onAnalysisComplete }) => {
   const { worker, isWorkerReady, workerError } = useWorker();
   const [progress, setProgress] = useState(0);
@@ -65,7 +67,7 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
         return;
       }
 
-      setStatus('Analyzing frames accurately...');
+      setStatus(`Analyzing frames at ${ANALYSIS_PLAYBACK_RATE}x...`);
 
       const dummyEngine = new TypingEngine(
         layout,
@@ -161,13 +163,13 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
         destroyEngine();
       };
 
-      video.playbackRate = 1.0;
+      video.playbackRate = ANALYSIS_PLAYBACK_RATE;
       video.play().catch((err) => {
         console.error('[Analysis] Video playback error:', err);
         setStatus('Failed to play recorded video.');
         cleanupAnalysis();
       });
-      console.log('[Analysis] Video playback started.');
+      console.log(`[Analysis] Video playback started at ${ANALYSIS_PLAYBACK_RATE}x.`);
 
       const processVideoFrame = () => {
         if (cancelled || isFinalized) return;
