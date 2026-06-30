@@ -15,24 +15,18 @@ type VideoWithCallback = HTMLVideoElement & {
   requestVideoFrameCallback: (callback: (now: number, metadata: Record<string, unknown>) => void) => number;
 };
 
-const PLAYBACK_RATE = 8;
-const KEY_WINDOW_BEFORE_MS = 180;
-const KEY_WINDOW_AFTER_MS = 260;
-const MIN_FRAME_GAP_MS = 45;
-
 export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, layout, onAnalysisComplete }) => {
   const { worker, isWorkerReady, workerError } = useWorker();
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState<string>('Preparing video for analysis...');
-  
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isAnalyzing = useRef(false);
-  
+
   useEffect(() => {
     if (!isWorkerReady || !worker || isAnalyzing.current) return;
     if (!unanalyzedData.blob) {
-      // If no video was recorded (e.g. camera disabled), finalize immediately without frames
       const dummyEngine = new TypingEngine(layout, unanalyzedData.homography);
       dummyEngine.loadKeystrokes(unanalyzedData.keystrokes);
       const jsonStr = dummyEngine.exportSession();
@@ -50,17 +44,9 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
     let cancelled = false;
     let cleanupAnalysis = () => {};
     const url = URL.createObjectURL(unanalyzedData.blob);
+    video.src = url;
 
     video.onloadeddata = () => {
-      const dummyEngine = new TypingEngine(layout, unanalyzedData.homography);
-      let engineDestroyed = false;
-      const destroyEngine = () => {
-        if (!engineDestroyed) {
-          dummyEngine.destroy();
-          engineDestroyed = true;
-        }
-      };
-
       console.log(`[Analysis] Video metadata loaded. Resolution: ${video.videoWidth}x${video.videoHeight}, Duration: ${video.duration.toFixed(2)}s`);
       video.width = video.videoWidth;
       video.height = video.videoHeight;
@@ -70,52 +56,53 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
       const ctx = canvas.getContext('2d');
       if (!ctx) {
         setStatus('Could not create analysis canvas context.');
-        destroyEngine();
         URL.revokeObjectURL(url);
         return;
       }
 
-      const sortedKeystrokes = [...unanalyzedData.keystrokes].sort((a, b) => a.timestamp - b.timestamp);
-      let nextKeystrokeIndex = 0;
+      setStatus('Analyzing frames accurately...');
+
+      const dummyEngine = new TypingEngine(layout, unanalyzedData.homography);
+      dummyEngine.startSession();
+
       let pendingFrames = 0;
-      let processedFrames = 0;
-      let lastSubmittedTimestamp = -Infinity;
+      let lastProcessedTime = -1;
+      let frameCounter = 0;
       let isFinalized = false;
       let finalizeRetryCount = 0;
       const FINALIZE_MAX_RETRIES = 100;
 
-      const shouldAnalyzeTimestamp = (timestamp: number): boolean => {
-        while (
-          nextKeystrokeIndex < sortedKeystrokes.length &&
-          timestamp > sortedKeystrokes[nextKeystrokeIndex].timestamp + KEY_WINDOW_AFTER_MS
-        ) {
-          nextKeystrokeIndex++;
-        }
-
-        const nextKeystroke = sortedKeystrokes[nextKeystrokeIndex];
-        if (!nextKeystroke) return false;
-        return timestamp >= nextKeystroke.timestamp - KEY_WINDOW_BEFORE_MS;
+      const destroyEngine = () => {
+        dummyEngine.destroy();
       };
 
       const handleWorkerMessage = (e: MessageEvent) => {
         if (e.data.type === 'DETECT_RESULT') {
           pendingFrames--;
           const { results, timestamp } = e.data;
-          processedFrames++;
 
-          const handsData = results && results.landmarks && results.landmarks.length > 0
-            ? mapMediaPipeResults(results)
-            : [];
-          dummyEngine.processFrame(
-            handsData,
-            timestamp,
-            canvas.width,
-            canvas.height,
-            unanalyzedData.isMirrored ?? true
-          );
+          frameCounter++;
+          if (frameCounter % 30 === 0) {
+            console.log(`[Analysis] Processed ${frameCounter} frames. Video Time: ${video.currentTime.toFixed(2)}s / ${video.duration.toFixed(2)}s. Queue: ${pendingFrames}`);
+          }
 
-          if (processedFrames % 30 === 0) {
-            console.log(`[Analysis] Processed ${processedFrames} windowed frames. Video Time: ${video.currentTime.toFixed(2)}s / ${video.duration.toFixed(2)}s. Queue: ${pendingFrames}`);
+          if (results && results.landmarks && results.landmarks.length > 0) {
+            const handsData = mapMediaPipeResults(results);
+            dummyEngine.processFrame(
+              handsData,
+              timestamp,
+              canvas.width,
+              canvas.height,
+              unanalyzedData.isMirrored ?? true
+            );
+          } else {
+            dummyEngine.processFrame(
+              [],
+              timestamp,
+              canvas.width,
+              canvas.height,
+              unanalyzedData.isMirrored ?? true
+            );
           }
         } else if (e.data.type === 'DETECT_ERROR') {
           pendingFrames--;
@@ -124,14 +111,12 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
       };
 
       worker.addEventListener('message', handleWorkerMessage);
-      dummyEngine.startSession();
-      setStatus(`Analyzing key windows at ${PLAYBACK_RATE}x...`);
-      video.playbackRate = PLAYBACK_RATE;
 
       const finalize = () => {
         if (isFinalized) return;
         if (pendingFrames > 0 && finalizeRetryCount < FINALIZE_MAX_RETRIES) {
           finalizeRetryCount++;
+          console.log(`[Analysis] Finalizing queued. Waiting for ${pendingFrames} pending frames to resolve... (retry ${finalizeRetryCount}/${FINALIZE_MAX_RETRIES})`);
           setTimeout(finalize, 100);
           return;
         }
@@ -142,19 +127,20 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
 
         worker.removeEventListener('message', handleWorkerMessage);
         video.removeEventListener('ended', handleVideoEnded);
+        URL.revokeObjectURL(url);
+
         setStatus('Finalizing session data...');
-        console.log(`[Analysis] Windowed frame processing complete. Total analyzed frames: ${processedFrames}. Exporting session JSON...`);
+        console.log(`[Analysis] Frame processing complete. Total analyzed frames: ${frameCounter}. Exporting session JSON...`);
         dummyEngine.loadKeystrokes(unanalyzedData.keystrokes);
         const finalJson = dummyEngine.exportSession();
         destroyEngine();
-        URL.revokeObjectURL(url);
         if (!cancelled) {
           onAnalysisComplete(JSON.parse(finalJson));
         }
       };
 
       const handleVideoEnded = () => {
-        console.log("[Analysis] Video ended event fired. Finalizing...");
+        console.log('[Analysis] Video ended event fired. Finalizing...');
         finalize();
       };
 
@@ -165,12 +151,13 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
         destroyEngine();
       };
 
+      video.playbackRate = 1.0;
       video.play().catch((err) => {
-        console.error("[Analysis] Video playback error:", err);
+        console.error('[Analysis] Video playback error:', err);
         setStatus('Failed to play recorded video.');
         cleanupAnalysis();
       });
-      console.log(`[Analysis] Video playback started at ${PLAYBACK_RATE}x.`);
+      console.log('[Analysis] Video playback started.');
 
       const processVideoFrame = () => {
         if (cancelled || isFinalized) return;
@@ -179,13 +166,9 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
           return;
         }
 
-        const timestamp = video.currentTime * 1000;
-        if (
-          shouldAnalyzeTimestamp(timestamp) &&
-          timestamp - lastSubmittedTimestamp >= MIN_FRAME_GAP_MS &&
-          pendingFrames < 2
-        ) {
-          lastSubmittedTimestamp = timestamp;
+        if (video.currentTime !== lastProcessedTime && pendingFrames < 2) {
+          lastProcessedTime = video.currentTime;
+
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           createImageBitmap(canvas).then(bitmap => {
             if (cancelled || isFinalized) {
@@ -193,31 +176,29 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
               return;
             }
             pendingFrames++;
+            const timestamp = video.currentTime * 1000;
             worker.postMessage({ type: 'DETECT', image: bitmap, timestamp }, [bitmap]);
-          }).catch(err => console.error("[Analysis] Bitmap creation failed:", err));
+          }).catch(err => console.error('[Analysis] Bitmap creation failed:', err));
         }
 
         setProgress(Number.isFinite(video.duration) ? (video.currentTime / video.duration) * 100 : 0);
 
         if ('requestVideoFrameCallback' in video) {
-           (video as VideoWithCallback).requestVideoFrameCallback(processVideoFrame);
+          (video as VideoWithCallback).requestVideoFrameCallback(processVideoFrame);
         } else {
-           requestAnimationFrame(processVideoFrame);
+          requestAnimationFrame(processVideoFrame);
         }
       };
 
       if ('requestVideoFrameCallback' in video) {
-         (video as VideoWithCallback).requestVideoFrameCallback(processVideoFrame);
+        (video as VideoWithCallback).requestVideoFrameCallback(processVideoFrame);
       } else {
-         requestAnimationFrame(processVideoFrame);
+        requestAnimationFrame(processVideoFrame);
       }
     };
 
-    video.src = url;
-    video.load();
-
     video.onerror = (e) => {
-      console.error("[Analysis] Video playback error:", e);
+      console.error('[Analysis] Video playback error:', e);
       setStatus('Failed to load recorded video.');
     };
 
@@ -233,23 +214,23 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
       <h2 style={{ marginBottom: '1rem' }}>Post-Session Analysis</h2>
       {workerError && <div style={{ color: 'red' }}>Worker Error: {workerError}</div>}
       <p style={{ color: '#00adb5', fontSize: '1.2rem', marginBottom: '2rem' }}>{status}</p>
-      
+
       <div style={{ width: '80%', maxWidth: '600px', height: '10px', background: 'rgba(255,255,255,0.1)', borderRadius: '5px', overflow: 'hidden' }}>
         <div style={{ height: '100%', width: `${progress}%`, background: '#00adb5', transition: 'width 0.2s' }} />
       </div>
 
-      <video 
-        ref={videoRef} 
-        style={{ 
-          position: 'absolute', 
-          width: '1px', 
-          height: '1px', 
-          opacity: 0.01, 
-          pointerEvents: 'none', 
-          zIndex: -1 
-        }} 
-        muted 
-        playsInline 
+      <video
+        ref={videoRef}
+        style={{
+          position: 'absolute',
+          width: '1px',
+          height: '1px',
+          opacity: 0.01,
+          pointerEvents: 'none',
+          zIndex: -1
+        }}
+        muted
+        playsInline
       />
       <canvas ref={canvasRef} style={{ display: 'none' }} />
     </div>
