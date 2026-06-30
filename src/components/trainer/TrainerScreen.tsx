@@ -12,15 +12,21 @@ import type { PracticeCategory } from '../../utils/plantDictionary';
 import { mapMediaPipeResults } from '../../utils/mediapipeUtils';
 import '../../styles/cameraPreview.css';
 import '../../styles/trainer.css';
-import type { CalibrationHomography } from '../../utils/calibrationStorage';
+import type { CalibrationCameraSize, CalibrationHomography } from '../../utils/calibrationStorage';
 
 interface TrainerScreenProps {
   layout: KeyboardLayout;
   homography: CalibrationHomography | null;
+  calibrationCameraSize?: CalibrationCameraSize;
   onSessionComplete?: (data: UnanalyzedSessionData | SessionData) => void;
 }
 
-export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography, onSessionComplete }) => {
+export const TrainerScreen: React.FC<TrainerScreenProps> = ({
+  layout,
+  homography,
+  calibrationCameraSize,
+  onSessionComplete
+}) => {
   const engineRef = useRef<TypingEngine | null>(null);
   const handleKeyPressRef = useRef<(code: string, keystrokeIndex: number) => void>(() => {});
 
@@ -136,14 +142,19 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
   
   useEffect(() => {
     if (homography) {
-      engineRef.current = new TypingEngine(layout, homography, (code, idx) => handleKeyPressRef.current(code, idx));
+      engineRef.current = new TypingEngine(
+        layout,
+        homography,
+        (code, idx) => handleKeyPressRef.current(code, idx),
+        calibrationCameraSize
+      );
     }
     return () => {
       if (engineRef.current) {
         engineRef.current.destroy();
       }
     };
-  }, [homography, layout]);
+  }, [homography, layout, calibrationCameraSize]);
 
   // Handle worker responses in real-time mode
   useEffect(() => {
@@ -231,6 +242,7 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
             blob,
             keystrokes: engineRef.current!.getRawKeystrokes(),
             homography: homography!,
+            calibrationCameraSize,
             isMirrored
           });
         }

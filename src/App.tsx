@@ -4,7 +4,7 @@ import { CalibrationScreen } from './components/calibration/CalibrationScreen';
 import { DashboardScreen } from './components/dashboard/DashboardScreen';
 import type { UnanalyzedSessionData, SessionData } from './utils/TypingEngine';
 import { loadCalibration, saveCalibration } from './utils/calibrationStorage';
-import type { CalibrationHomography } from './utils/calibrationStorage';
+import type { CalibrationCameraSize, CalibrationHomography } from './utils/calibrationStorage';
 import type { LayoutPresetId } from './assets/layoutTemplates';
 import { useKeyboardLayout } from './hooks/useKeyboardLayout';
 import { PhoneCameraPage } from './components/camera/PhoneCameraPage';
@@ -27,6 +27,9 @@ function MainApp() {
   const [homography, setHomography] = useState<CalibrationHomography | null>(
     savedConfig ? savedConfig.homography : null
   );
+  const [calibrationCameraSize, setCalibrationCameraSize] = useState<CalibrationCameraSize | undefined>(
+    savedConfig?.cameraSize
+  );
   const [mode, setMode] = useState<'calibration' | 'trainer' | 'dashboard'>(
     savedConfig ? 'trainer' : 'calibration'
   );
@@ -48,12 +51,14 @@ function MainApp() {
   const handleCalibrationComplete = (
     presetId: string,
     calibration: CalibrationHomography,
+    cameraSize?: CalibrationCameraSize,
     customData?: unknown,
     customIsSplit?: boolean
   ) => {
     saveCalibration({
       layoutPresetId: presetId,
       homography: calibration,
+      cameraSize,
       customLayoutData: customData,
       customLayoutIsSplit: customIsSplit,
     });
@@ -61,6 +66,7 @@ function MainApp() {
     if (customData !== undefined) setCustomLayoutData(customData);
     if (customIsSplit !== undefined) setCustomLayoutIsSplit(customIsSplit);
     setHomography(calibration);
+    setCalibrationCameraSize(cameraSize);
     setUnanalyzedData(null);
     setAnalyzedData(null);
     setMode('trainer');
@@ -131,6 +137,7 @@ function MainApp() {
           <TrainerScreen
             layout={layout}
             homography={homography}
+            calibrationCameraSize={calibrationCameraSize}
             onSessionComplete={handleSessionComplete}
           />
         )}

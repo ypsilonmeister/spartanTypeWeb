@@ -2,7 +2,7 @@ import type { Point } from './homography';
 import type { KeyboardLayout, Key } from '../types/kle';
 import { matchKLEKey, expectedFingerMap } from './keyMap';
 import { applyCalibrationHomography } from './calibrationStorage';
-import type { CalibrationHomography } from './calibrationStorage';
+import type { CalibrationCameraSize, CalibrationHomography } from './calibrationStorage';
 
 export interface HandData {
   landmarks: { x: number, y: number, z: number, visibility?: number }[];
@@ -26,6 +26,7 @@ export interface KeystrokeLog {
 
 export interface SessionData {
   homography: CalibrationHomography;
+  calibrationCameraSize?: CalibrationCameraSize;
   frames: FrameLog[];
   keystrokes: KeystrokeLog[];
 }
@@ -34,6 +35,7 @@ export interface UnanalyzedSessionData {
   blob: Blob | null;
   keystrokes: KeystrokeLog[];
   homography: CalibrationHomography;
+  calibrationCameraSize?: CalibrationCameraSize;
   isMirrored?: boolean;
 }
 
@@ -95,6 +97,7 @@ function assignHandSidesByCameraX(
 export class TypingEngine {
   private layout: KeyboardLayout;
   private homography: CalibrationHomography;
+  private calibrationCameraSize?: CalibrationCameraSize;
   private onKeyPressCallback?: (code: string, keystrokeIndex: number) => void;
   
   private frames: FrameLog[] = [];
@@ -123,10 +126,16 @@ export class TypingEngine {
     }
   };
 
-  constructor(layout: KeyboardLayout, homography: CalibrationHomography, onKeyPressCallback?: (code: string, keystrokeIndex: number) => void) {
+  constructor(
+    layout: KeyboardLayout,
+    homography: CalibrationHomography,
+    onKeyPressCallback?: (code: string, keystrokeIndex: number) => void,
+    calibrationCameraSize?: CalibrationCameraSize
+  ) {
     this.layout = layout;
     this.homography = homography;
     this.onKeyPressCallback = onKeyPressCallback;
+    this.calibrationCameraSize = calibrationCameraSize;
     
     window.addEventListener('keydown', this.handleKeyDown);
   }
@@ -314,6 +323,7 @@ export class TypingEngine {
 
     const data: SessionData = {
       homography: this.homography,
+      calibrationCameraSize: this.calibrationCameraSize,
       frames: this.frames,
       keystrokes: enrichedKeystrokes,
     };
@@ -396,6 +406,8 @@ export class TypingEngine {
   ): Point[] {
     const mappedTips: Record<string, Point> = {};
     const uiPointers: Point[] = []; // Usually Index fingers
+    const transformWidth = this.calibrationCameraSize?.width || canvasWidth;
+    const transformHeight = this.calibrationCameraSize?.height || canvasHeight;
 
     if (hands && hands.length > 0) {
       const assignedSides = assignHandSidesByCameraX(hands, canvasWidth, mirror);
@@ -405,14 +417,14 @@ export class TypingEngine {
 
         const indexTip = hand.landmarks[8];
         if (indexTip) {
-          const screenPt = landmarkToScreen(indexTip, canvasWidth, canvasHeight, mirror);
+          const screenPt = landmarkToScreen(indexTip, transformWidth, transformHeight, mirror);
           uiPointers.push(applyCalibrationHomography(this.homography, screenPt, side));
         }
 
         for (const finger of FINGERS) {
           const tip = hand.landmarks[finger.index];
           if (tip) {
-            const pt = landmarkToScreen(tip, canvasWidth, canvasHeight, mirror);
+            const pt = landmarkToScreen(tip, transformWidth, transformHeight, mirror);
             mappedTips[`${side}${finger.name}`] = applyCalibrationHomography(this.homography, pt, side);
           }
         }

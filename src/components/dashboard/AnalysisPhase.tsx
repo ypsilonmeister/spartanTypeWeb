@@ -27,7 +27,12 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
   useEffect(() => {
     if (!isWorkerReady || !worker || isAnalyzing.current) return;
     if (!unanalyzedData.blob) {
-      const dummyEngine = new TypingEngine(layout, unanalyzedData.homography);
+      const dummyEngine = new TypingEngine(
+        layout,
+        unanalyzedData.homography,
+        undefined,
+        unanalyzedData.calibrationCameraSize
+      );
       dummyEngine.loadKeystrokes(unanalyzedData.keystrokes);
       const jsonStr = dummyEngine.exportSession();
       dummyEngine.destroy();
@@ -62,7 +67,12 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
 
       setStatus('Analyzing frames accurately...');
 
-      const dummyEngine = new TypingEngine(layout, unanalyzedData.homography);
+      const dummyEngine = new TypingEngine(
+        layout,
+        unanalyzedData.homography,
+        undefined,
+        unanalyzedData.calibrationCameraSize
+      );
       dummyEngine.startSession();
 
       let pendingFrames = 0;

@@ -14,7 +14,7 @@ import type { Point } from '../../utils/homography';
 import { LAYOUT_PRESETS } from '../../assets/layoutTemplates';
 import type { LayoutPresetId } from '../../assets/layoutTemplates';
 import { applyCalibrationHomography } from '../../utils/calibrationStorage';
-import type { CalibrationHomography } from '../../utils/calibrationStorage';
+import type { CalibrationCameraSize, CalibrationHomography } from '../../utils/calibrationStorage';
 import { mapMediaPipeResults } from '../../utils/mediapipeUtils';
 import {
   HOME_ANCHORS,
@@ -32,6 +32,7 @@ interface CalibrationScreenProps {
   onComplete: (
     presetId: string,
     homography: CalibrationHomography,
+    cameraSize?: CalibrationCameraSize,
     customLayoutData?: unknown,
     customLayoutIsSplit?: boolean
   ) => void;
@@ -915,9 +916,11 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
                 <button
                   onClick={() => {
                     if (computedHomography) {
+                      const canvas = canvasRef.current;
                       onComplete(
                         presetId,
                         computedHomography,
+                        canvas ? { width: canvas.width, height: canvas.height } : undefined,
                         presetId === 'custom' && uploadedData ? uploadedData : undefined,
                         presetId === 'custom' ? uploadedIsSplit : undefined
                       );
