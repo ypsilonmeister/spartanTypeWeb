@@ -14,6 +14,34 @@ import '../../styles/cameraPreview.css';
 import '../../styles/trainer.css';
 import type { CalibrationCameraSize, CalibrationHomography } from '../../utils/calibrationStorage';
 
+const RECORDING_MAX_WIDTH = 960;
+const RECORDING_FPS = 30;
+const RECORDING_VIDEO_BITS_PER_SECOND = 1_500_000;
+
+const getEvenSize = (value: number) => Math.max(2, Math.round(value / 2) * 2);
+
+const getRecordingSize = (sourceWidth: number, sourceHeight: number): CalibrationCameraSize => {
+  if (sourceWidth <= RECORDING_MAX_WIDTH) {
+    return { width: getEvenSize(sourceWidth), height: getEvenSize(sourceHeight) };
+  }
+
+  const scale = RECORDING_MAX_WIDTH / sourceWidth;
+  return {
+    width: getEvenSize(RECORDING_MAX_WIDTH),
+    height: getEvenSize(sourceHeight * scale)
+  };
+};
+
+const getSupportedRecordingMimeType = () => {
+  const preferredTypes = [
+    'video/webm;codecs=vp8',
+    'video/webm;codecs=vp9',
+    'video/webm'
+  ];
+
+  return preferredTypes.find((type) => MediaRecorder.isTypeSupported(type));
+};
+
 interface TrainerScreenProps {
   layout: KeyboardLayout;
   homography: CalibrationHomography | null;
@@ -49,6 +77,10 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const sessionStartRef = useRef(0);
+  const recordingCanvasRef = useRef<HTMLCanvasElement>(null);
+  const recordingAnimationFrameRef = useRef<number | null>(null);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const recordingCameraSizeRef = useRef<CalibrationCameraSize | undefined>(calibrationCameraSize);
 
   // Analysis mode: offline (record and analyze) vs realtime (capture at keypress)
   const [analysisMode, setAnalysisMode] = useState<'offline' | 'realtime'>(() => {
@@ -219,7 +251,68 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
   }, [analysisMode, worker, isWorkerReady, isMirrored]);
 
   // 60fps main thread Hand Tracker Loop is removed to guarantee zero-latency.
-  // Video capturing is handled directly via MediaRecorder.
+  // Video capture is downscaled through a canvas before MediaRecorder to keep long sessions lighter.
+
+  const stopRecordingCapture = useCallback(() => {
+    if (recordingAnimationFrameRef.current !== null) {
+      cancelAnimationFrame(recordingAnimationFrameRef.current);
+      recordingAnimationFrameRef.current = null;
+    }
+
+    recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+    recordingStreamRef.current = null;
+  }, []);
+
+  useEffect(() => stopRecordingCapture, [stopRecordingCapture]);
+
+  const startOfflineRecording = useCallback(() => {
+    const video = videoRef.current;
+    const canvas = recordingCanvasRef.current;
+    if (!video || !canvas) {
+      throw new Error('Recording video or canvas is not ready.');
+    }
+
+    const sourceWidth = video.videoWidth || 640;
+    const sourceHeight = video.videoHeight || 480;
+    recordingCameraSizeRef.current = calibrationCameraSize ?? { width: sourceWidth, height: sourceHeight };
+
+    const recordingSize = getRecordingSize(sourceWidth, sourceHeight);
+    canvas.width = recordingSize.width;
+    canvas.height = recordingSize.height;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      throw new Error('Could not create recording canvas context.');
+    }
+
+    const drawFrame = () => {
+      if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        ctx.drawImage(video, 0, 0, recordingSize.width, recordingSize.height);
+      }
+      recordingAnimationFrameRef.current = requestAnimationFrame(drawFrame);
+    };
+    drawFrame();
+
+    const recordingStream = canvas.captureStream(RECORDING_FPS);
+    recordingStreamRef.current = recordingStream;
+
+    const mimeType = getSupportedRecordingMimeType();
+    const options: MediaRecorderOptions = {
+      videoBitsPerSecond: RECORDING_VIDEO_BITS_PER_SECOND
+    };
+    if (mimeType) options.mimeType = mimeType;
+
+    const recorder = new MediaRecorder(recordingStream, options);
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) recordedChunksRef.current.push(e.data);
+    };
+    recorder.start(1000);
+    mediaRecorderRef.current = recorder;
+
+    console.log(
+      `[Recording] Capturing ${sourceWidth}x${sourceHeight} as ${recordingSize.width}x${recordingSize.height} at ${RECORDING_FPS}fps.`
+    );
+  }, [calibrationCameraSize]);
 
   const toggleRecording = () => {
     if (!engineRef.current) return;
@@ -242,7 +335,7 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
             blob,
             keystrokes: engineRef.current!.getRawKeystrokes(),
             homography: homography!,
-            calibrationCameraSize,
+            calibrationCameraSize: recordingCameraSizeRef.current ?? calibrationCameraSize,
             isMirrored
           });
         }
@@ -251,10 +344,12 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         mediaRecorderRef.current.onstop = () => {
           const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+          stopRecordingCapture();
           finalizeSession(blob);
         };
         mediaRecorderRef.current.stop();
       } else {
+        stopRecordingCapture();
         finalizeSession(null);
       }
       
@@ -264,14 +359,10 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
       if (analysisMode === 'offline' && stream) {
         recordedChunksRef.current = [];
         try {
-          const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8' });
-          recorder.ondataavailable = (e) => {
-            if (e.data.size > 0) recordedChunksRef.current.push(e.data);
-          };
-          recorder.start();
-          mediaRecorderRef.current = recorder;
+          startOfflineRecording();
         } catch (e) {
           console.error("MediaRecorder start failed:", e);
+          stopRecordingCapture();
         }
       }
 
@@ -299,6 +390,7 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
             className="trainer-camera-video"
             style={{ transform: isMirrored ? 'scaleX(-1)' : 'none' }}
           />
+          <canvas ref={recordingCanvasRef} style={{ display: 'none' }} />
         </div>
 
         {/* Typing Word Display (Drill-down Drill) */}
