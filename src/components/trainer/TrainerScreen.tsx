@@ -161,7 +161,7 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
         const video = videoRef.current;
         const videoWidth = video?.videoWidth || 640;
         const videoHeight = video?.videoHeight || 480;
-        engineRef.current.processFrame(handsData, timestamp, videoWidth, videoHeight);
+        engineRef.current.processFrame(handsData, timestamp, videoWidth, videoHeight, isMirrored);
 
         // keystrokeIndex で発火元キーストロークを確実に取得 (timestamp 近似に頼らない)
         const match = typeof keystrokeIndex === 'number'
@@ -205,7 +205,7 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
     return () => {
       worker.removeEventListener('message', handleWorkerMessage);
     };
-  }, [analysisMode, worker, isWorkerReady]);
+  }, [analysisMode, worker, isWorkerReady, isMirrored]);
 
   // 60fps main thread Hand Tracker Loop is removed to guarantee zero-latency.
   // Video capturing is handled directly via MediaRecorder.
@@ -230,7 +230,8 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({ layout, homography
           onSessionComplete({
             blob,
             keystrokes: engineRef.current!.getRawKeystrokes(),
-            homography: homography!
+            homography: homography!,
+            isMirrored
           });
         }
       };

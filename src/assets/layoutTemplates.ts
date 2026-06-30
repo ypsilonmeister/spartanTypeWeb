@@ -33,11 +33,54 @@ export const JIS_60_SPLIT_DATA: unknown[] = [
   [{ w: 1.25 }, "Ctrl", { w: 1 }, "Win", { w: 1.25 }, "Alt", "無変換", { w: 2.25 }, "Space", { x: 2, w: 2.25 }, "Space", "変換", "かな", { w: 1.25 }, "Alt", { w: 1.25 }, "Ctrl"]
 ];
 
+// 36-key split column-staggered layout (3x5 + 3 thumbs).
+// The y modifiers below are relative KLE offsets. They keep each physical column
+// at a consistent vertical offset across Q/A/Z, W/S/X, etc.
 export const SPLIT_36_DATA: unknown[] = [
-  [{ a: 4 }, "Q", "W", "E", "R", "T", { x: 2 }, "Y", "U", "I", "O", "P"],
-  ["A", "S", "D", "F", "G", { x: 2 }, "H", "J", "K", "L", ";"],
-  ["Z", "X", "C", "V", "B", { x: 2 }, "N", "M", ",", ".", "/"],
-  [{ x: 2 }, "Tab", "Space", "Esc", { x: 2 }, "Enter", "Backspace", "Del"]
+  [
+    { a: 4, y: 0.35 }, "Q",
+    { y: -0.20 }, "W",
+    { y: -0.15 }, "E",
+    { y: 0.10 }, "R",
+    { y: 0.10 }, "T",
+    { x: 2 }, "Y",
+    { y: -0.10 }, "U",
+    { y: -0.10 }, "I",
+    { y: 0.15 }, "O",
+    { y: 0.20 }, "P"
+  ],
+  [
+    "A",
+    { y: -0.20 }, "S",
+    { y: -0.15 }, "D",
+    { y: 0.10 }, "F",
+    { y: 0.10 }, "G",
+    { x: 2 }, "H",
+    { y: -0.10 }, "J",
+    { y: -0.10 }, "K",
+    { y: 0.15 }, "L",
+    { y: 0.20 }, ";"
+  ],
+  [
+    "Z",
+    { y: -0.20 }, "X",
+    { y: -0.15 }, "C",
+    { y: 0.10 }, "V",
+    { y: 0.10 }, "B",
+    { x: 2 }, "N",
+    { y: -0.10 }, "M",
+    { y: -0.10 }, ",",
+    { y: 0.15 }, ".",
+    { y: 0.20 }, "/"
+  ],
+  [
+    { x: 2, y: 0.15 }, "Tab",
+    { y: 0.15 }, "Space",
+    { y: -0.15 }, "Esc",
+    { x: 2 }, "Enter",
+    { y: 0.15 }, "Backspace",
+    { y: -0.15 }, "Del"
+  ]
 ];
 
 export type LayoutPresetId = 'us-standard' | 'jis-standard' | 'us-split' | 'jis-split' | 'split-36';

@@ -75,9 +75,21 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
           
           if (results && results.landmarks && results.landmarks.length > 0) {
             const handsData = mapMediaPipeResults(results);
-            dummyEngine.processFrame(handsData, timestamp, canvas.width, canvas.height);
+            dummyEngine.processFrame(
+              handsData,
+              timestamp,
+              canvas.width,
+              canvas.height,
+              unanalyzedData.isMirrored ?? true
+            );
           } else {
-             dummyEngine.processFrame([], timestamp, canvas.width, canvas.height);
+             dummyEngine.processFrame(
+               [],
+               timestamp,
+               canvas.width,
+               canvas.height,
+               unanalyzedData.isMirrored ?? true
+             );
           }
         } else if (e.data.type === 'DETECT_ERROR') {
           pendingFrames--;

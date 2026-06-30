@@ -1,35 +1,37 @@
 /**
- * Maps physical keyboard Event.code to standard QWERTY KLE labels.
- * This ensures symbols and modifiers match the virtual keyboard layout exactly.
+ * Maps physical keyboard Event.code to acceptable KLE labels.
+ * Layouts in this app may use either KLE-style shifted legends ("?\n/") or
+ * compact labels ("/"), especially on 36-key column-staggered keyboards.
  */
-export const codeToKLELabelMap: Record<string, string> = {
+export const codeToKLELabelMap: Record<string, string | string[]> = {
   // Alphabet
   KeyQ: 'Q', KeyW: 'W', KeyE: 'E', KeyR: 'R', KeyT: 'T', KeyY: 'Y', KeyU: 'U', KeyI: 'I', KeyO: 'O', KeyP: 'P',
   KeyA: 'A', KeyS: 'S', KeyD: 'D', KeyF: 'F', KeyG: 'G', KeyH: 'H', KeyJ: 'J', KeyK: 'K', KeyL: 'L',
   KeyZ: 'Z', KeyX: 'X', KeyC: 'C', KeyV: 'V', KeyB: 'B', KeyN: 'N', KeyM: 'M',
   
-  // Digits (Often mapped to symbols in KLE with \n)
-  Digit1: '!\n1', Digit2: '@\n2', Digit3: '#\n3', Digit4: '$\n4', Digit5: '%\n5',
-  Digit6: '^\n6', Digit7: '&\n7', Digit8: '*\n8', Digit9: '(\n9', Digit0: ')\n0',
+  // Digits
+  Digit1: ['!\n1', '1'], Digit2: ['@\n2', '2'], Digit3: ['#\n3', '3'], Digit4: ['$\n4', '4'], Digit5: ['%\n5', '5'],
+  Digit6: ['^\n6', '6'], Digit7: ['&\n7', '7'], Digit8: ['*\n8', '8'], Digit9: ['(\n9', '9'], Digit0: [')\n0', '0'],
   
   // Punctuation
-  Minus: '_\n-', Equal: '+\n=',
-  BracketLeft: '{\n[', BracketRight: '}\n]', Backslash: '|\n\\',
-  Semicolon: ':\n;', Quote: '"\n\'',
-  Comma: '<\n,', Period: '>\n.', Slash: '?\n/',
-  Backquote: '~\n`',
+  Minus: ['_\n-', '-'], Equal: ['+\n=', '='],
+  BracketLeft: ['{\n[', '['], BracketRight: ['}\n]', ']'], Backslash: ['|\n\\', '\\'],
+  Semicolon: [':\n;', ';'], Quote: ['"\n\'', "'"],
+  Comma: ['<\n,', ','], Period: ['>\n.', '.'], Slash: ['?\n/', '/'],
+  Backquote: ['~\n`', '`'],
   
   // Modifiers and special keys
-  Space: '', // KLE often leaves spacebar empty or named ''
+  Space: ['', 'Space'], // KLE often leaves spacebar empty or names it.
   Enter: 'Enter',
   Tab: 'Tab',
-  Backspace: 'Backspace',
+  Backspace: ['Backspace', 'BS'],
   ShiftLeft: 'Shift', ShiftRight: 'Shift',
-  ControlLeft: 'Ctrl', ControlRight: 'Ctrl',
+  ControlLeft: ['Ctrl', 'Control'], ControlRight: ['Ctrl', 'Control'],
   AltLeft: 'Alt', AltRight: 'Alt',
   MetaLeft: 'Win', MetaRight: 'Win',
   Escape: 'Esc',
-  CapsLock: 'Caps Lock'
+  CapsLock: ['Caps Lock', 'Caps'],
+  Delete: ['Del', 'Delete']
 };
 
 /**
@@ -38,14 +40,19 @@ export const codeToKLELabelMap: Record<string, string> = {
 export function matchKLEKey(kleLabel: string, physicalCode: string): boolean {
   const expectedLabel = codeToKLELabelMap[physicalCode];
   if (expectedLabel === undefined) return false;
-  
-  // Space is a special case: often empty label in KLE
-  if (physicalCode === 'Space') {
-    return kleLabel === '' || kleLabel.toLowerCase() === 'space';
-  }
 
-  // Exact match handles line breaks in KLE correctly
-  return kleLabel === expectedLabel;
+  const expected = (Array.isArray(expectedLabel) ? expectedLabel : [expectedLabel])
+    .map((label) => label.trim().toLowerCase());
+  const normalizedLabel = kleLabel.trim().toLowerCase();
+  if (expected.includes(normalizedLabel)) return true;
+
+  // Multi-legend KLE labels may be represented as "shifted\nbase". A compact
+  // keyboard layout may only care about matching the unshifted base legend.
+  const legends = normalizedLabel
+    .split('\n')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return legends.some((legend) => expected.includes(legend));
 }
 
 /**

@@ -1,7 +1,7 @@
-import { applyHomography } from './homography';
-import type { HomographyMatrix, Point } from './homography';
+import type { Point } from './homography';
 import type { KeyboardLayout, Key } from '../types/kle';
 import { matchKLEKey, expectedFingerMap } from './keyMap';
+import { applyCalibrationHomography } from './calibrationStorage';
 import type { CalibrationHomography } from './calibrationStorage';
 
 export interface HandData {
@@ -34,6 +34,7 @@ export interface UnanalyzedSessionData {
   blob: Blob | null;
   keystrokes: KeystrokeLog[];
   homography: CalibrationHomography;
+  isMirrored?: boolean;
 }
 
 const FINGERS = [
@@ -43,6 +44,53 @@ const FINGERS = [
   { index: 16, name: 'Ring' },
   { index: 20, name: 'Pinky' }
 ];
+
+function landmarkToScreen(
+  landmark: { x: number; y: number },
+  canvasWidth: number,
+  canvasHeight: number,
+  mirror: boolean
+): Point {
+  return {
+    x: (mirror ? 1 - landmark.x : landmark.x) * canvasWidth,
+    y: landmark.y * canvasHeight
+  };
+}
+
+/**
+ * Use the same left/right rule as calibration: after mirror correction, the hand
+ * on the left side of the camera frame maps to the left half of the keyboard.
+ * MediaPipe handedness is often unreliable for top-down keyboard cameras.
+ */
+function assignHandSidesByCameraX(
+  hands: HandData[],
+  canvasWidth: number,
+  mirror: boolean
+): Map<HandData, 'Left' | 'Right'> {
+  const withX = hands
+    .map((hand) => {
+      const wrist = hand.landmarks[0];
+      const screenX = wrist ? (mirror ? 1 - wrist.x : wrist.x) * canvasWidth : 0;
+      return { hand, screenX };
+    })
+    .sort((a, b) => a.screenX - b.screenX);
+
+  const sides = new Map<HandData, 'Left' | 'Right'>();
+  if (withX.length === 0) return sides;
+
+  if (withX.length === 1) {
+    const single = withX[0];
+    sides.set(single.hand, single.screenX < canvasWidth / 2 ? 'Left' : 'Right');
+    return sides;
+  }
+
+  sides.set(withX[0].hand, 'Left');
+  sides.set(withX[withX.length - 1].hand, 'Right');
+  for (let i = 1; i < withX.length - 1; i++) {
+    sides.set(withX[i].hand, withX[i].screenX < canvasWidth / 2 ? 'Left' : 'Right');
+  }
+  return sides;
+}
 
 export class TypingEngine {
   private layout: KeyboardLayout;
@@ -179,6 +227,32 @@ export class TypingEngine {
     }
   }
 
+  private isCompactSplitLayout(): boolean {
+    return !!this.layout.isSplit && this.layout.keys.length <= 36 && this.layout.width <= 13;
+  }
+
+  private getExpectedFinger(code: string, targetKey: Key): string | string[] {
+    if (!this.isCompactSplitLayout()) {
+      return expectedFingerMap[code] || 'Unknown';
+    }
+
+    const centerX = targetKey.x + targetKey.w / 2;
+    const centerY = targetKey.y + targetKey.h / 2;
+
+    // 3x5+3 layouts place thumb keys below the three alpha rows.
+    if (centerY >= 3) {
+      return centerX < this.layout.width / 2 ? 'LeftThumb' : 'RightThumb';
+    }
+
+    if (centerX < this.layout.width / 2) {
+      const col = Math.round(centerX - 0.5);
+      return ['LeftPinky', 'LeftRing', 'LeftMiddle', 'LeftIndex', 'LeftIndex'][col] || 'LeftIndex';
+    }
+
+    const col = Math.round(centerX - 7.5);
+    return ['RightIndex', 'RightIndex', 'RightMiddle', 'RightRing', 'RightPinky'][col] || 'RightIndex';
+  }
+
   public exportSession(): string {
     const enrichedKeystrokes = this.keystrokes.map(ks => {
       const nearestFrame = this.findNearestFrame(ks.timestamp);
@@ -209,7 +283,7 @@ export class TypingEngine {
         }
       }
 
-      const expectedFinger = expectedFingerMap[ks.code] || 'Unknown';
+      const expectedFinger = this.getExpectedFinger(ks.code, targetKey);
       
       // If no fingers mapped or distance is way too far (e.g. hands out of keyboard area)
       if (minDistance > 1.5) {
@@ -284,7 +358,7 @@ export class TypingEngine {
       }
     }
 
-    const expectedFinger = expectedFingerMap[keystroke.code] || 'Unknown';
+    const expectedFinger = this.getExpectedFinger(keystroke.code, targetKey);
 
     // If no fingers mapped or distance is way too far (e.g. hands out of keyboard area)
     if (minDistance > 1.5) {
@@ -317,31 +391,29 @@ export class TypingEngine {
     hands: HandData[], 
     timestamp: number, 
     canvasWidth: number, 
-    canvasHeight: number
+    canvasHeight: number,
+    mirror = true
   ): Point[] {
     const mappedTips: Record<string, Point> = {};
     const uiPointers: Point[] = []; // Usually Index fingers
 
     if (hands && hands.length > 0) {
+      const assignedSides = assignHandSidesByCameraX(hands, canvasWidth, mirror);
+
       for (const hand of hands) {
-        let activeHomography: HomographyMatrix;
-        if (this.homography && typeof this.homography === 'object' && 'isSplit' in this.homography) {
-          activeHomography = hand.handedness === 'Left' ? this.homography.left : this.homography.right;
-        } else {
-          activeHomography = this.homography as HomographyMatrix;
-        }
+        const side = assignedSides.get(hand) ?? hand.handedness;
 
         const indexTip = hand.landmarks[8];
         if (indexTip) {
-          const screenPt = { x: (1 - indexTip.x) * canvasWidth, y: indexTip.y * canvasHeight };
-          uiPointers.push(applyHomography(activeHomography, screenPt));
+          const screenPt = landmarkToScreen(indexTip, canvasWidth, canvasHeight, mirror);
+          uiPointers.push(applyCalibrationHomography(this.homography, screenPt, side));
         }
 
         for (const finger of FINGERS) {
           const tip = hand.landmarks[finger.index];
           if (tip) {
-            const pt = { x: (1 - tip.x) * canvasWidth, y: tip.y * canvasHeight };
-            mappedTips[`${hand.handedness}${finger.name}`] = applyHomography(activeHomography, pt);
+            const pt = landmarkToScreen(tip, canvasWidth, canvasHeight, mirror);
+            mappedTips[`${side}${finger.name}`] = applyCalibrationHomography(this.homography, pt, side);
           }
         }
       }
