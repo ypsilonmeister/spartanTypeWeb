@@ -2,6 +2,21 @@ import { HandLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 
 let landmarker: HandLandmarker | null = null;
 let isInitializing = false;
+let timestampOffset = 0;
+let lastDetectTimestamp = -Infinity;
+
+function getMonotonicDetectTimestamp(timestamp: number): number {
+  if (!Number.isFinite(timestamp)) {
+    return lastDetectTimestamp + 1;
+  }
+
+  if (timestamp + timestampOffset <= lastDetectTimestamp) {
+    timestampOffset = lastDetectTimestamp + 1 - timestamp;
+  }
+
+  lastDetectTimestamp = timestamp + timestampOffset;
+  return lastDetectTimestamp;
+}
 
 // Initialize the landmarker when the worker starts
 async function initLandmarker() {
@@ -40,7 +55,8 @@ self.onmessage = (e: MessageEvent) => {
     initLandmarker();
   } else if (type === 'DETECT' && landmarker && image) {
     try {
-      const results = landmarker.detectForVideo(image as ImageBitmap, timestamp);
+      const detectTimestamp = getMonotonicDetectTimestamp(timestamp);
+      const results = landmarker.detectForVideo(image as ImageBitmap, detectTimestamp);
 
       // Post results back to main thread.
       // keystrokeIndex はリアルタイム解析で送られてきた場合のみ存在し、

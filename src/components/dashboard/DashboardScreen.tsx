@@ -17,6 +17,7 @@ interface DashboardScreenProps {
 export const DashboardScreen: React.FC<DashboardScreenProps> = ({ layout, initialUnanalyzedData, initialAnalyzedData }) => {
   const [sessionData, setSessionData] = useState<SessionData | null>(initialAnalyzedData || null);
   const [unanalyzedData, setUnanalyzedData] = useState<UnanalyzedSessionData | null>(initialUnanalyzedData || null);
+  const [recordingBlob, setRecordingBlob] = useState<Blob | null>(initialUnanalyzedData?.blob || null);
   const [error, setError] = useState<string | null>(null);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -34,6 +35,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ layout, initia
         }
         
         setSessionData(data);
+        setRecordingBlob(null);
         setError(null);
       } catch (err) {
         console.error('Failed to parse session data:', err);
@@ -56,6 +58,18 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ layout, initia
     downloadAnchor.remove();
   };
 
+  const handleExportRecording = () => {
+    if (!recordingBlob) return;
+    const url = URL.createObjectURL(recordingBlob);
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', url);
+    downloadAnchor.setAttribute('download', `spartan-recording-${Date.now()}.webm`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="dashboard-container">
       <div className="dashboard-header">
@@ -74,6 +88,21 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ layout, initia
               }}
             >
               Export Session JSON
+            </button>
+          )}
+          {recordingBlob && (
+            <button
+              onClick={handleExportRecording}
+              className="upload-btn"
+              style={{
+                background: 'linear-gradient(135deg, #ff007f, #b30059)',
+                color: '#fff',
+                fontWeight: 'bold',
+                border: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              Export Recording WebM
             </button>
           )}
           <label className="upload-btn">
@@ -103,6 +132,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ layout, initia
           onAnalysisComplete={(data) => {
             setSessionData(data);
             setUnanalyzedData(null);
+            setRecordingBlob(unanalyzedData.blob);
           }} 
         />
       )}
