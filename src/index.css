@@ -126,7 +126,10 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding-bottom: var(--space-md);
   min-height: 0; /* required for flex children to shrink below content size */
 }
 
@@ -247,4 +250,45 @@ body {
   font-weight: 600;
   letter-spacing: 1.5px;
   color: var(--color-accent);
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    padding: var(--space-lg);
+  }
+
+  .app-navbar {
+    align-items: flex-start;
+    gap: var(--space-md);
+    margin-bottom: var(--space-lg);
+  }
+
+  .app-nav-tabs {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .app-nav-tab {
+    padding: 0.5rem 1rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell {
+    padding: var(--space-md);
+  }
+
+  .app-navbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .app-nav-tabs {
+    justify-content: stretch;
+  }
+
+  .app-nav-tab {
+    flex: 1;
+    min-width: 0;
+  }
 }

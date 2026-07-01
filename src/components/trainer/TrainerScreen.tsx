@@ -72,6 +72,9 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
 
   const [pressedKeyCode, setPressedKeyCode] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [viewportWidth, setViewportWidth] = useState(() => (
+    typeof window === 'undefined' ? 1200 : window.innerWidth
+  ));
 
   // MediaRecorder refs for post-session analysis
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -115,6 +118,21 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
   const [flashError, setFlashError] = useState(false);
+
+  const keyboardUnitSize = useMemo(() => {
+    const appPadding = viewportWidth <= 700 ? 32 : viewportWidth <= 1100 ? 48 : 64;
+    const sidePanelWidth = isRecording && viewportWidth > 1100 ? 332 : 0;
+    const keyboardChrome = 48;
+    const availableWidth = Math.max(
+      320,
+      viewportWidth - appPadding - sidePanelWidth - keyboardChrome
+    );
+    const fitUnitSize = Math.floor(availableWidth / layout.width);
+    const targetUnitSize = isRecording ? 56 : 42;
+    const minimumUnitSize = isRecording ? 44 : 32;
+
+    return Math.max(minimumUnitSize, Math.min(targetUnitSize, fitUnitSize));
+  }, [isRecording, layout.width, viewportWidth]);
 
   const handleSetPracticeCategory = (category: PracticeCategory) => {
     setPracticeCategory(category);
@@ -171,6 +189,17 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
   useEffect(() => {
     handleKeyPressRef.current = handleKeyPress;
   }, [handleKeyPress]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setViewportWidth(window.innerWidth);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
   
   useEffect(() => {
     if (homography) {
@@ -375,7 +404,7 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
   };
 
   return (
-    <div className="trainer-layout">
+    <div className={`trainer-layout${isRecording ? ' is-recording' : ''}`}>
 
       {/* Left Column: Camera Video & Virtual Keyboard */}
       <div className="trainer-left-column">
@@ -437,7 +466,7 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
         <div className="trainer-keyboard-wrapper">
            <VirtualKeyboard
             layout={layout}
-            unitSize={42}
+            unitSize={keyboardUnitSize}
             gap={5}
             pointers={[]}
             activeKeyCode={pressedKeyCode}

@@ -620,9 +620,9 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
         width: '100%',
         maxWidth: '900px',
         margin: '0 auto',
-        flex: 1,
-        overflow: 'hidden',
-        minHeight: 0,
+        flex: '0 0 auto',
+        overflow: 'visible',
+        minHeight: 'auto',
       }}
     >
       <div style={{ display: 'flex', gap: '1.5rem', width: '100%', flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -973,6 +973,9 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
           display: 'inline-block',
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
           marginTop: '0.5rem',
+          maxWidth: '100%',
+          overflowX: 'auto',
+          boxSizing: 'border-box',
         }}
       >
         <VirtualKeyboard

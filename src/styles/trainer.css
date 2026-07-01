@@ -10,9 +10,15 @@
   justify-content: center;
   align-items: flex-start;
   flex-wrap: wrap;
-  overflow: hidden;
+  overflow: visible;
   flex: 1;
   min-height: 0;
+  padding-bottom: var(--space-md);
+}
+
+.trainer-layout.is-recording {
+  gap: var(--space-lg);
+  max-width: 1280px;
 }
 
 /* ---- Left Column ---- */
@@ -25,11 +31,25 @@
   max-width: 720px;
 }
 
+.trainer-layout.is-recording .trainer-left-column {
+  align-items: stretch;
+  flex: 1 1 780px;
+  max-width: 900px;
+  gap: var(--space-md);
+}
+
 .trainer-camera-preview {
   width: 100%;
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: var(--shadow-card-lg);
+}
+
+.trainer-layout.is-recording .trainer-camera-preview {
+  order: 3;
+  align-self: flex-end;
+  width: min(240px, 36vw);
+  border-radius: var(--radius-md);
 }
 
 .trainer-camera-video {
@@ -40,6 +60,7 @@
 
 /* ---- Typing Word Display ---- */
 .trainer-word-display {
+  order: 1;
   width: 100%;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -119,10 +140,25 @@
 }
 
 .trainer-keyboard-wrapper {
+  order: 2;
   position: relative;
   background: rgba(0, 0, 0, 0.2);
   padding: var(--space-md);
   border-radius: var(--radius-lg);
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.trainer-layout.is-recording .trainer-keyboard-wrapper {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-sm);
+  width: 100%;
+}
+
+.trainer-keyboard-wrapper .virtual-keyboard {
+  flex: 0 0 auto;
 }
 
 /* ---- Right Column ---- */
@@ -132,6 +168,11 @@
   align-items: center;
   gap: var(--space-lg);
   width: 340px;
+}
+
+.trainer-layout.is-recording .trainer-right-column {
+  width: 300px;
+  gap: var(--space-md);
 }
 
 .trainer-control-panel {
@@ -145,6 +186,11 @@
   flex-direction: column;
   align-items: center;
   gap: var(--space-md);
+}
+
+.trainer-layout.is-recording .trainer-control-panel {
+  gap: var(--space-sm);
+  padding: var(--space-md);
 }
 
 .trainer-calibration-status {
@@ -266,6 +312,12 @@
   box-shadow: var(--shadow-accent);
 }
 
+.trainer-layout.is-recording .trainer-record-btn {
+  border-radius: var(--radius-md);
+  font-size: 1rem;
+  padding: 0.9rem 1rem;
+}
+
 .trainer-record-btn.is-recording {
   background: linear-gradient(135deg, var(--color-error), #cc0000);
   box-shadow: 0 4px 15px rgba(255, 77, 77, 0.4);
@@ -300,8 +352,77 @@
   text-align: center;
 }
 
+.trainer-layout.is-recording .trainer-tree-panel {
+  display: none;
+}
+
 .trainer-tree-icon {
   font-size: 2rem;
   display: block;
   margin-bottom: var(--space-sm);
+}
+
+@media (max-width: 1100px) {
+  .trainer-layout {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: var(--space-lg);
+    max-width: min(100%, 900px);
+  }
+
+  .trainer-left-column,
+  .trainer-right-column,
+  .trainer-layout.is-recording .trainer-left-column,
+  .trainer-layout.is-recording .trainer-right-column {
+    width: 100%;
+    max-width: none;
+    flex: 0 0 auto;
+  }
+
+  .trainer-right-column {
+    order: -1;
+  }
+
+  .trainer-control-panel {
+    box-sizing: border-box;
+  }
+
+  .trainer-camera-preview {
+    align-self: center;
+    max-width: 680px;
+  }
+
+  .trainer-layout.is-recording .trainer-camera-preview {
+    align-self: flex-end;
+    width: min(190px, 42vw);
+  }
+}
+
+@media (max-width: 700px) {
+  .trainer-layout {
+    gap: var(--space-md);
+  }
+
+  .trainer-left-column,
+  .trainer-layout.is-recording .trainer-left-column {
+    gap: var(--space-sm);
+  }
+
+  .trainer-word-display {
+    padding: var(--space-md);
+  }
+
+  .trainer-word-japanese {
+    font-size: 1.2rem;
+    margin-bottom: var(--space-sm);
+  }
+
+  .trainer-word-romaji {
+    font-size: 1.65rem;
+  }
+
+  .trainer-layout.is-recording .trainer-camera-preview {
+    width: min(160px, 48vw);
+  }
 }
