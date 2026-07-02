@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import type { KeyboardLayout } from '../../types/kle';
-import type { KeystrokeLog } from '../../utils/TypingEngine';
+import type { KeystrokeLog } from '../../types/session';
 import { matchKLEKey } from '../../utils/keyMap';
 import '../../styles/keyboard.css';
 
@@ -36,11 +36,7 @@ export const KeyboardHeatmap: React.FC<KeyboardHeatmapProps> = ({
   const containerStyle: React.CSSProperties = {
     width: layout.width * unitSize,
     height: layout.height * unitSize,
-    position: 'relative',
-    background: 'rgba(0, 0, 0, 0.2)',
-    borderRadius: '12px',
     padding: `${gap / 2}px`,
-    boxSizing: 'content-box'
   };
 
   const getHeatColor = (errorRate: number) => {
@@ -81,7 +77,7 @@ export const KeyboardHeatmap: React.FC<KeyboardHeatmapProps> = ({
         return (
           <div
             key={index}
-            className="vk-key"
+            className="vk-key heatmap-key"
             style={{
               position: 'absolute',
               left: `${left + gap / 2}px`,
@@ -90,18 +86,11 @@ export const KeyboardHeatmap: React.FC<KeyboardHeatmapProps> = ({
               height: `${height}px`,
               backgroundColor: bg,
               border: total > 0 && errorRate === 0 ? '1px solid #00ff00' : (errorRate > 0 ? '1px solid #ff4444' : '1px solid rgba(255,255,255,0.1)'),
-              color: '#ffffff',
-              fontSize: '11px',
-              flexDirection: 'column',
-              justifyContent: 'center',
-              alignItems: 'center',
-              padding: '2px',
-              textAlign: 'center'
             }}
           >
-            <div style={{ fontWeight: '500', lineHeight: '1.2' }}>{key.label}</div>
+            <div className="heatmap-key-label">{key.label}</div>
             {total > 0 && (
-              <div style={{ fontSize: '9px', opacity: 0.9, marginTop: '2px', fontWeight: 'bold', color: errorRate > 0 ? '#ff4444' : '#00ff00' }}>
+              <div className={`heatmap-key-stat${errorRate > 0 ? ' is-error' : ' is-clean'}`}>
                 {Math.round(errorRate * 100)}%
               </div>
             )}

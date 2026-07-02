@@ -80,7 +80,6 @@ export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
               color: tc,
               boxShadow: glow,
               transform: trans,
-              transition: 'background-color 0.2s, box-shadow 0.2s, transform 0.1s',
             }}
           >
             {key.label}
@@ -92,18 +91,10 @@ export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
       {pointers.map((p, i) => (
         <div
           key={`pointer-${i}`}
+          className="vk-pointer"
           style={{
-            position: 'absolute',
             left: p.x * unitSize,
             top: p.y * unitSize,
-            width: '12px',
-            height: '12px',
-            backgroundColor: '#00ffff',
-            borderRadius: '50%',
-            transform: 'translate(-50%, -50%)',
-            boxShadow: '0 0 10px #00ffff',
-            zIndex: 10,
-            pointerEvents: 'none',
           }}
         />
       ))}
@@ -112,18 +103,10 @@ export const VirtualKeyboard: React.FC<VirtualKeyboardProps> = ({
       {homePointers.map((p, i) => (
         <div
           key={`home-pointer-${i}`}
+          className="vk-home-pointer"
           style={{
-            position: 'absolute',
             left: p.x * unitSize,
             top: p.y * unitSize,
-            width: '24px',
-            height: '24px',
-            border: '2.5px double #00ff88',
-            borderRadius: '50%',
-            transform: 'translate(-50%, -50%)',
-            boxShadow: '0 0 12px rgba(0, 255, 136, 0.9)',
-            zIndex: 9,
-            pointerEvents: 'none',
           }}
         />
       ))}

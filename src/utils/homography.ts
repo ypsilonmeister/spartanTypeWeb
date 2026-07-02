@@ -1,9 +1,5 @@
-export interface Point {
-  x: number;
-  y: number;
-}
-
-export type HomographyMatrix = number[]; // 9 elements (3x3 row-major)
+export type { Point, HomographyMatrix } from '../types/geometry';
+import type { Point, HomographyMatrix } from '../types/geometry';
 
 /**
  * Solves Ax = B using Gaussian elimination with partial pivoting.
@@ -58,42 +54,6 @@ function solveLinearSystem(A: number[][], B: number[]): number[] {
     }
   }
   return x;
-}
-
-/**
- * Computes the Homography matrix mapping src points to dst points.
- * Requires exactly 4 point correspondences.
- *
- * @param src Array of 4 Point objects (e.g., Camera pixel coordinates)
- * @param dst Array of 4 Point objects (e.g., Virtual Keyboard logical coordinates)
- * @returns 9-element array representing the 3x3 homography matrix (row-major), or null if failed
- */
-export function computeHomography(src: Point[], dst: Point[]): HomographyMatrix | null {
-  if (src.length !== 4 || dst.length !== 4) return null;
-
-  const A: number[][] = [];
-  const B: number[] = [];
-
-  for (let i = 0; i < 4; i++) {
-    const { x, y } = src[i];
-    const { x: u, y: v } = dst[i];
-
-    // DLT formulation
-    A.push([x, y, 1, 0, 0, 0, -u * x, -u * y]);
-    B.push(u);
-
-    A.push([0, 0, 0, x, y, 1, -v * x, -v * y]);
-    B.push(v);
-  }
-
-  try {
-    const h = solveLinearSystem(A, B);
-    // Append the scale factor h33 = 1
-    return [...h, 1];
-  } catch (e) {
-    console.error("Failed to compute homography matrix", e);
-    return null;
-  }
 }
 
 /** 3x3 行列 (row-major 9要素) の積 A·B。 */
@@ -160,8 +120,8 @@ function normalizationTransform(pts: Point[]): { T: number[]; normalized: Point[
 /**
  * Computes a homography from N >= 4 point correspondences using least squares.
  *
- * 4点ぴったりなら computeHomography と同等の解になるが、5点以上を渡すと
- * 過剰決定系を最小二乗で解く。入力は Hartley 正規化してから DLT を解くため、
+ * 4点ぴったりなら厳密解、5点以上を渡すと過剰決定系を最小二乗で解く。
+ * 入力は Hartley 正規化してから DLT を解くため、
  * ホーム1行＋縦アンカーのような平面的広がりに乏しい配置でも安定する。
  * キャリブレーションでホーム8指 + コーナー(QZP/) を集約して使う。
  *

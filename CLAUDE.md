@@ -27,9 +27,10 @@ To achieve sub-millisecond typing latencies and a butter-smooth 60fps webcam fra
 * Uses Direct Linear Transformation (DLT) to calculate a $3 \times 3$ Homography matrix from 4 projection coordinate pairs.
 * `cameraToLayout(px, py)` transforms MediaPipe finger pixels back into Virtual Keyboard units $(x, y)$ for finger-proximity matching.
 
-### Offline Tracking Engine (`src/utils/TypingEngine.ts`)
+### Offline Tracking Engine (`src/domain/typingSession.ts`)
 * To avoid UI thread blocking during typing, no MediaPipe HandLandmarker inference runs in real-time.
 * The system records keystroke timestamps and camera feeds, then aligns and decodes finger landmarks asynchronously in a post-session analysis phase.
+* Browser I/O lives in `src/infra/` (`keyboardCapture.ts`, `offlineAnalyzer.ts`, `videoFrameSource.ts`, worker protocol/config). Pure typing-session enrichment and finger analysis live in `src/domain/`.
 
 ---
 
@@ -51,8 +52,13 @@ To achieve sub-millisecond typing latencies and a butter-smooth 60fps webcam fra
   * `dashboard/`: Session metrics, heatmaps, and diagnostic labels.
   * `calibration/`: Four-point homography projection setups.
   * `tree/`: Canvas-based neon plant classification visualizer.
+* `src/hooks/`: React orchestration for app session state, calibration capture, practice drills, recording, and worker-backed feedback.
+* `src/domain/`: Pure TypeScript logic for hand geometry, finger analysis, practice-list selection, and typing-session serialization. No React or DOM access.
+* `src/infra/`: Browser and MediaPipe integration: keyboard capture, worker protocol/config, offline video analysis, and frame extraction.
+* `src/types/`: Shared geometry, calibration, session, KLE, and practice interfaces.
 * `src/utils/`: Logic engines.
-  * `homography.ts`: Projective projection geometry calculations.
+  * `homography.ts`: Projective projection matrix calculation.
   * `kleParser.ts`: KLE layout configuration loader.
-  * `TypingEngine.ts`: Recording, timestamp syncing, and parsing.
+  * `calibrationStorage.ts`: localStorage persistence for calibration data.
+  * `mediapipeUtils.ts`: MediaPipe result mapping helpers.
   * `keyMap.ts`: Key-to-finger mapping table.

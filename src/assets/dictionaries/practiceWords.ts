@@ -1,0 +1,92 @@
+import type { FlatWord, PracticeCategory } from '../../types/practice';
+
+export const programmerWords: FlatWord[] = [
+  // 基本コマンド
+  { japanese: '表示する', romaji: 'PRINT', path: 'きほんコマンド' },
+  { japanese: '返す', romaji: 'RETURN', path: 'きほんコマンド' },
+  { japanese: '関数', romaji: 'FUNCTION', path: 'きほんコマンド' },
+  { japanese: '変数', romaji: 'VARIABLE', path: 'きほんコマンド' },
+  { japanese: '定数', romaji: 'CONST', path: 'きほんコマンド' },
+  { japanese: '読み込む', romaji: 'IMPORT', path: 'きほんコマンド' },
+  { japanese: '書き出す', romaji: 'EXPORT', path: 'きほんコマンド' },
+  { japanese: 'もし', romaji: 'IF', path: '制御' },
+  { japanese: 'そうでなければ', romaji: 'ELSE', path: '制御' },
+  { japanese: '繰り返す', romaji: 'FOR', path: '制御' },
+  { japanese: '〜の間', romaji: 'WHILE', path: '制御' },
+  { japanese: '抜ける', romaji: 'BREAK', path: '制御' },
+  { japanese: '続ける', romaji: 'CONTINUE', path: '制御' },
+  { japanese: '真', romaji: 'TRUE', path: '値' },
+  { japanese: '偽', romaji: 'FALSE', path: '値' },
+  { japanese: '空', romaji: 'NULL', path: '値' },
+  { japanese: '配列', romaji: 'ARRAY', path: 'データ' },
+  { japanese: '文字列', romaji: 'STRING', path: 'データ' },
+  { japanese: '数値', romaji: 'NUMBER', path: 'データ' },
+  { japanese: 'オブジェクト', romaji: 'OBJECT', path: 'データ' },
+  { japanese: 'クラス', romaji: 'CLASS', path: 'データ' },
+  // 道具・概念
+  { japanese: 'コード', romaji: 'CODE', path: 'がいねん' },
+  { japanese: 'バグ', romaji: 'BUG', path: 'がいねん' },
+  { japanese: 'デバッグ', romaji: 'DEBUG', path: 'がいねん' },
+  { japanese: 'コンパイル', romaji: 'COMPILE', path: 'がいねん' },
+  { japanese: 'サーバー', romaji: 'SERVER', path: 'がいねん' },
+  { japanese: 'データ', romaji: 'DATA', path: 'がいねん' },
+  { japanese: 'ファイル', romaji: 'FILE', path: 'がいねん' },
+  { japanese: 'キー', romaji: 'KEY', path: 'がいねん' },
+  { japanese: '値', romaji: 'VALUE', path: 'がいねん' },
+  { japanese: 'ループ', romaji: 'LOOP', path: 'がいねん' }
+];
+
+export const beginnerWords: FlatWord[] = [
+  // あ行 〜 文字をひとつずつ
+  { japanese: 'あ', romaji: 'A', path: 'あいうえお' },
+  { japanese: 'い', romaji: 'I', path: 'あいうえお' },
+  { japanese: 'う', romaji: 'U', path: 'あいうえお' },
+  { japanese: 'え', romaji: 'E', path: 'あいうえお' },
+  { japanese: 'お', romaji: 'O', path: 'あいうえお' },
+  { japanese: 'か', romaji: 'KA', path: 'かきくけこ' },
+  { japanese: 'き', romaji: 'KI', path: 'かきくけこ' },
+  { japanese: 'く', romaji: 'KU', path: 'かきくけこ' },
+  { japanese: 'け', romaji: 'KE', path: 'かきくけこ' },
+  { japanese: 'こ', romaji: 'KO', path: 'かきくけこ' },
+  { japanese: 'さ', romaji: 'SA', path: 'さしすせそ' },
+  { japanese: 'し', romaji: 'SI', path: 'さしすせそ' },
+  { japanese: 'す', romaji: 'SU', path: 'さしすせそ' },
+  { japanese: 'せ', romaji: 'SE', path: 'さしすせそ' },
+  { japanese: 'そ', romaji: 'SO', path: 'さしすせそ' },
+  { japanese: 'た', romaji: 'TA', path: 'たちつてと' },
+  { japanese: 'て', romaji: 'TE', path: 'たちつてと' },
+  { japanese: 'と', romaji: 'TO', path: 'たちつてと' },
+  { japanese: 'な', romaji: 'NA', path: 'なにぬねの' },
+  { japanese: 'ね', romaji: 'NE', path: 'なにぬねの' },
+  { japanese: 'の', romaji: 'NO', path: 'なにぬねの' },
+  { japanese: 'は', romaji: 'HA', path: 'はひふへほ' },
+  { japanese: 'ひ', romaji: 'HI', path: 'はひふへほ' },
+  { japanese: 'ま', romaji: 'MA', path: 'まみむめも' },
+  { japanese: 'み', romaji: 'MI', path: 'まみむめも' },
+  { japanese: 'め', romaji: 'ME', path: 'まみむめも' },
+  { japanese: 'や', romaji: 'YA', path: 'やゆよ' },
+  { japanese: 'ゆ', romaji: 'YU', path: 'やゆよ' },
+  { japanese: 'よ', romaji: 'YO', path: 'やゆよ' },
+  { japanese: 'ら', romaji: 'RA', path: 'らりるれろ' },
+  { japanese: 'り', romaji: 'RI', path: 'らりるれろ' },
+  { japanese: 'わ', romaji: 'WA', path: 'わをん' },
+  // やさしい たんご
+  { japanese: 'あお', romaji: 'AO', path: 'やさしいことば' },
+  { japanese: 'あか', romaji: 'AKA', path: 'やさしいことば' },
+  { japanese: 'いぬ', romaji: 'INU', path: 'やさしいことば' },
+  { japanese: 'ねこ', romaji: 'NEKO', path: 'やさしいことば' },
+  { japanese: 'うみ', romaji: 'UMI', path: 'やさしいことば' },
+  { japanese: 'そら', romaji: 'SORA', path: 'やさしいことば' },
+  { japanese: 'はな', romaji: 'HANA', path: 'やさしいことば' },
+  { japanese: 'やま', romaji: 'YAMA', path: 'やさしいことば' },
+  { japanese: 'みず', romaji: 'MIZU', path: 'やさしいことば' },
+  { japanese: 'ほし', romaji: 'HOSI', path: 'やさしいことば' },
+  { japanese: 'つき', romaji: 'TUKI', path: 'やさしいことば' },
+  { japanese: 'たいよう', romaji: 'TAIYOU', path: 'やさしいことば' }
+];
+
+export const practiceCategoryLabels: Record<PracticeCategory, string> = {
+  plant: '🌱 植物の名前',
+  programmer: '💻 プログラマー',
+  beginner: 'あ 初級（あいうえお）'
+};

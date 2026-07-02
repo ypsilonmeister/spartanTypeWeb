@@ -36,6 +36,31 @@
   display: inline-block;
 }
 
+.upload-section {
+  display: flex;
+  gap: 1rem;
+}
+
+.upload-btn-export-json {
+  background: linear-gradient(135deg, #00ffcc, #00adb5);
+  color: #111;
+  font-weight: bold;
+  border: none;
+  cursor: pointer;
+}
+
+.upload-btn-export-recording {
+  background: linear-gradient(135deg, #ff007f, #b30059);
+  color: #fff;
+  font-weight: bold;
+  border: none;
+  cursor: pointer;
+}
+
+.visually-hidden-input {
+  display: none;
+}
+
 .upload-btn:hover {
   opacity: 0.8;
 }
@@ -62,6 +87,29 @@
   display: flex;
   flex-direction: column;
   gap: 2rem;
+}
+
+.dashboard-main-grid {
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+  align-items: stretch;
+  width: 100%;
+}
+
+.dashboard-summary-column {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  flex: 1 1 500px;
+}
+
+.dashboard-tree-column {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 340px;
+  flex: 0 0 340px;
 }
 
 .top-row {
@@ -165,8 +213,121 @@
   margin: 0;
 }
 
+.virtual-keyboard.heatmap {
+  position: relative;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+  box-sizing: content-box;
+}
+
 .virtual-key .key-stats {
   display: block;
   margin-top: 4px;
   font-weight: bold;
+}
+
+.heatmap-key {
+  color: #ffffff;
+  font-size: 11px;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 2px;
+  text-align: center;
+}
+
+.heatmap-key-label {
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.heatmap-key-stat {
+  font-size: 9px;
+  opacity: 0.9;
+  margin-top: 2px;
+  font-weight: bold;
+}
+
+.heatmap-key-stat.is-error {
+  color: #ff4444;
+}
+
+.heatmap-key-stat.is-clean {
+  color: #00ff00;
+}
+
+.plant-tree-panel {
+  background: rgba(20, 20, 30, 0.4);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.plant-tree-canvas {
+  border-radius: 8px;
+  background: radial-gradient(circle, rgba(20, 20, 30, 0.8) 0%, rgba(10, 10, 15, 0.9) 100%);
+}
+
+.plant-tree-caption {
+  font-size: 12px;
+  color: #888;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+}
+
+.analysis-phase {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 400px;
+  width: 100%;
+}
+
+.analysis-title {
+  margin-bottom: 1rem;
+}
+
+.analysis-error {
+  color: red;
+}
+
+.analysis-status {
+  color: #00adb5;
+  font-size: 1.2rem;
+  margin-bottom: 2rem;
+}
+
+.analysis-progress {
+  width: 80%;
+  max-width: 600px;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.analysis-progress-bar {
+  height: 100%;
+  background: #00adb5;
+  transition: width 0.2s;
+}
+
+.analysis-hidden-video {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0.01;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.analysis-hidden-canvas {
+  display: none;
 }

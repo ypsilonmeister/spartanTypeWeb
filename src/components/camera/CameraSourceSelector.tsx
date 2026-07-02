@@ -46,40 +46,30 @@ export const CameraSourceSelector: React.FC<CameraSourceSelectorProps> = ({
   const isConnected = remoteStatus === 'connected';
 
   return (
-    <div className="cam-source" style={{ width: '100%' }}>
+    <div className="cam-source cam-source-full">
       {/* ソース切替トグル */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: source === 'remote' ? '1rem' : 0 }}>
+      <div className={`cam-source-toggle${source === 'remote' ? ' has-remote-margin' : ''}`}>
         <button
-          className="cam-btn cam-btn-secondary"
+          className={`cam-btn cam-btn-secondary cam-source-toggle-btn${source === 'local' ? ' is-active' : ''}`}
           onClick={() => onSourceChange('local')}
-          style={{
-            flex: 1,
-            background: source === 'local' ? 'linear-gradient(135deg, #00adb5, #007a82)' : undefined,
-            border: source === 'local' ? 'none' : undefined,
-          }}
         >
           💻 PCのカメラ
         </button>
         <button
-          className="cam-btn cam-btn-secondary"
+          className={`cam-btn cam-btn-secondary cam-source-toggle-btn${source === 'remote' ? ' is-active' : ''}`}
           onClick={() => onSourceChange('remote')}
-          style={{
-            flex: 1,
-            background: source === 'remote' ? 'linear-gradient(135deg, #00adb5, #007a82)' : undefined,
-            border: source === 'remote' ? 'none' : undefined,
-          }}
         >
           📱 スマホのカメラ
         </button>
       </div>
 
       {source === 'remote' && (
-        <div className="cam-card" style={{ maxWidth: 'none' }}>
+        <div className="cam-card cam-card-wide">
           {status.text && <div className={`cam-status ${status.cls}`}>{status.text}</div>}
 
           {!isConnected && (
             <>
-              <div className="cam-step-label" style={{ marginTop: '0.75rem' }}>
+              <div className="cam-step-label cam-step-label-spaced">
                 手順 1: スマホでこの QR を読み取る
               </div>
               <p className="cam-hint">
@@ -87,7 +77,7 @@ export const CameraSourceSelector: React.FC<CameraSourceSelectorProps> = ({
                 （PC とスマホは同じ Wi-Fi に接続してください）
               </p>
               {phoneUrl ? (
-                <div style={{ display: 'flex', justifyContent: 'center', margin: '0.75rem 0' }}>
+                <div className="cam-qr-wrap">
                   <QRCodeView value={phoneUrl} size={240} />
                 </div>
               ) : (
@@ -95,14 +85,14 @@ export const CameraSourceSelector: React.FC<CameraSourceSelectorProps> = ({
               )}
               {phoneUrl && (
                 <details>
-                  <summary className="cam-hint" style={{ cursor: 'pointer' }}>
+                  <summary className="cam-hint cam-details-summary">
                     QR が読めない場合はこの URL を手動で開く
                   </summary>
                   <textarea className="cam-textarea" readOnly value={phoneUrl} onFocus={(e) => e.target.select()} />
                 </details>
               )}
 
-              <div className="cam-step-label" style={{ marginTop: '1.25rem' }}>
+              <div className="cam-step-label cam-step-label-large-spaced">
                 手順 2: スマホの「応答コード」を貼り付け
               </div>
               <p className="cam-hint">スマホ側に表示された応答コードをコピーして貼り付け、接続してください。</p>
@@ -112,16 +102,15 @@ export const CameraSourceSelector: React.FC<CameraSourceSelectorProps> = ({
                 value={answerInput}
                 onChange={(e) => setAnswerInput(e.target.value)}
               />
-              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
+              <div className="cam-actions">
                 <button
-                  className="cam-btn"
-                  style={{ flex: 1 }}
+                  className="cam-btn cam-action-main"
                   disabled={!answerInput.trim()}
                   onClick={() => onSubmitAnswer(answerInput.trim())}
                 >
                   接続する
                 </button>
-                <button className="cam-btn cam-btn-secondary" style={{ flex: '0 0 auto' }} onClick={onRestart}>
+                <button className="cam-btn cam-btn-secondary cam-action-secondary" onClick={onRestart}>
                   やり直す
                 </button>
               </div>
@@ -129,7 +118,7 @@ export const CameraSourceSelector: React.FC<CameraSourceSelectorProps> = ({
           )}
 
           {isConnected && (
-            <p className="cam-hint" style={{ marginTop: '0.75rem' }}>
+            <p className="cam-hint cam-hint-spaced">
               スマホの映像で解析します。スマホのタブは開いたままにしてください。
             </p>
           )}

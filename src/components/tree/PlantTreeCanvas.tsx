@@ -238,28 +238,14 @@ export const PlantTreeCanvas: React.FC<PlantTreeCanvasProps> = ({
   }, [correctCount, incorrectCount, treeGrowth, maxDepth, combos, errorFactor]);
 
   return (
-    <div style={{
-      background: 'rgba(20, 20, 30, 0.4)',
-      backdropFilter: 'blur(8px)',
-      border: '1px solid rgba(255, 255, 255, 0.08)',
-      borderRadius: '16px',
-      padding: '12px',
-      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      gap: '8px'
-    }}>
+    <div className="plant-tree-panel">
       <canvas 
         ref={canvasRef} 
         width={width} 
         height={height}
-        style={{
-          borderRadius: '8px',
-          background: 'radial-gradient(circle, rgba(20,20,30,0.8) 0%, rgba(10,10,15,0.9) 100%)'
-        }}
+        className="plant-tree-canvas"
       />
-      <div style={{ fontSize: '12px', color: '#888', fontWeight: 400, letterSpacing: '0.5px' }}>
+      <div className="plant-tree-caption">
         Plant Classification Tree
       </div>
     </div>

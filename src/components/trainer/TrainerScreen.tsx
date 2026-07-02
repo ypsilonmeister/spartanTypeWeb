@@ -3,44 +3,19 @@ import { VirtualKeyboard } from '../common/VirtualKeyboard';
 import type { KeyboardLayout } from '../../types/kle';
 import { useCameraSource } from '../../hooks/useCameraSource';
 import type { CameraSource } from '../../hooks/useCameraSource';
-import { CameraSourceSelector } from '../camera/CameraSourceSelector';
-import { TypingEngine } from '../../utils/TypingEngine';
-import type { UnanalyzedSessionData, SessionData, FrameLog } from '../../utils/TypingEngine';
+import { TypingSession } from '../../domain/typingSession';
+import { subscribeKeyboardCapture } from '../../infra/keyboardCapture';
+import type { UnanalyzedSessionData, SessionData } from '../../types/session';
 import { useWorker } from '../../hooks/useWorker';
-import { getPracticeList, practiceCategoryLabels } from '../../utils/plantDictionary';
-import type { PracticeCategory } from '../../utils/plantDictionary';
-import { mapMediaPipeResults } from '../../utils/mediapipeUtils';
+import { usePracticeDrill } from '../../hooks/usePracticeDrill';
+import { useSessionRecorder } from '../../hooks/useSessionRecorder';
+import { useRealtimeFeedback } from '../../hooks/useRealtimeFeedback';
+import { PracticeWordDisplay } from './PracticeWordDisplay';
+import { TrainerControls } from './TrainerControls';
+import { TrainerTreePlaceholder } from './TrainerTreePlaceholder';
 import '../../styles/cameraPreview.css';
 import '../../styles/trainer.css';
-import type { CalibrationCameraSize, CalibrationHomography } from '../../utils/calibrationStorage';
-
-const RECORDING_MAX_WIDTH = 960;
-const RECORDING_FPS = 30;
-const RECORDING_VIDEO_BITS_PER_SECOND = 1_500_000;
-
-const getEvenSize = (value: number) => Math.max(2, Math.round(value / 2) * 2);
-
-const getRecordingSize = (sourceWidth: number, sourceHeight: number): CalibrationCameraSize => {
-  if (sourceWidth <= RECORDING_MAX_WIDTH) {
-    return { width: getEvenSize(sourceWidth), height: getEvenSize(sourceHeight) };
-  }
-
-  const scale = RECORDING_MAX_WIDTH / sourceWidth;
-  return {
-    width: getEvenSize(RECORDING_MAX_WIDTH),
-    height: getEvenSize(sourceHeight * scale)
-  };
-};
-
-const getSupportedRecordingMimeType = () => {
-  const preferredTypes = [
-    'video/webm;codecs=vp8',
-    'video/webm;codecs=vp9',
-    'video/webm'
-  ];
-
-  return preferredTypes.find((type) => MediaRecorder.isTypeSupported(type));
-};
+import type { CalibrationCameraSize, CalibrationHomography } from '../../types/calibration';
 
 interface TrainerScreenProps {
   layout: KeyboardLayout;
@@ -55,7 +30,7 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
   calibrationCameraSize,
   onSessionComplete
 }) => {
-  const engineRef = useRef<TypingEngine | null>(null);
+  const engineRef = useRef<TypingSession | null>(null);
   const handleKeyPressRef = useRef<(code: string, keystrokeIndex: number) => void>(() => {});
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -77,13 +52,14 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
   ));
 
   // MediaRecorder refs for post-session analysis
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordedChunksRef = useRef<Blob[]>([]);
   const sessionStartRef = useRef(0);
-  const recordingCanvasRef = useRef<HTMLCanvasElement>(null);
-  const recordingAnimationFrameRef = useRef<number | null>(null);
-  const recordingStreamRef = useRef<MediaStream | null>(null);
-  const recordingCameraSizeRef = useRef<CalibrationCameraSize | undefined>(calibrationCameraSize);
+  const {
+    recordingCanvasRef,
+    recordingCameraSizeRef,
+    startOfflineRecording,
+    stopOfflineRecording,
+    stopRecordingCapture,
+  } = useSessionRecorder({ videoRef, calibrationCameraSize });
 
   // Analysis mode: offline (record and analyze) vs realtime (capture at keypress)
   const [analysisMode, setAnalysisMode] = useState<'offline' | 'realtime'>(() => {
@@ -96,28 +72,32 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
     localStorage.setItem('spartan_analysis_mode', mode);
   };
 
-  // Real-time worker and feedback
   const { worker, isWorkerReady } = useWorker();
-  interface RealtimeFeedback {
-    key: string;
-    isCorrect: boolean;
-    expected: string;
-    got: string;
-  }
-  const [realtimeFeedback, setRealtimeFeedback] = useState<RealtimeFeedback | null>(null);
-
-  // Typing practice states. Category selects which dictionary to drill.
-  const [practiceCategory, setPracticeCategory] = useState<PracticeCategory>(() => {
-    const saved = localStorage.getItem('spartan_practice_category');
-    return (saved === 'programmer' || saved === 'beginner') ? saved : 'plant';
+  const {
+    realtimeFeedback,
+    setRealtimeFeedback,
+    captureRealtimeFrame,
+  } = useRealtimeFeedback({
+    analysisMode,
+    worker,
+    isWorkerReady,
+    videoRef,
+    sessionStartRef,
+    engineRef,
+    isMirrored,
   });
-  const practiceList = useMemo(
-    () => getPracticeList(practiceCategory, { shuffle: true }),
-    [practiceCategory]
-  );
-  const [currentWordIndex, setCurrentWordIndex] = useState(0);
-  const [currentCharIndex, setCurrentCharIndex] = useState(0);
-  const [flashError, setFlashError] = useState(false);
+
+  const {
+    practiceCategory,
+    practiceCategoryLabels,
+    practiceList,
+    currentWordIndex,
+    currentCharIndex,
+    flashError,
+    handleSetPracticeCategory,
+    handleKeyCode,
+    resetProgress,
+  } = usePracticeDrill();
 
   const keyboardUnitSize = useMemo(() => {
     const appPadding = viewportWidth <= 700 ? 32 : viewportWidth <= 1100 ? 48 : 64;
@@ -134,13 +114,6 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
     return Math.max(minimumUnitSize, Math.min(targetUnitSize, fitUnitSize));
   }, [isRecording, layout.width, viewportWidth]);
 
-  const handleSetPracticeCategory = (category: PracticeCategory) => {
-    setPracticeCategory(category);
-    localStorage.setItem('spartan_practice_category', category);
-    setCurrentWordIndex(0);
-    setCurrentCharIndex(0);
-  };
-
   const handleKeyPress = useCallback((code: string, keystrokeIndex: number) => {
     setPressedKeyCode(code);
     setTimeout(() => {
@@ -148,43 +121,10 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
     }, 150);
 
     if (engineRef.current && engineRef.current.isSessionActive) {
-      const currentWord = practiceList[currentWordIndex];
-      if (!currentWord) return;
-
-      const expectedChar = currentWord.node.romaji[currentCharIndex];
-      // Extract the character typed (only letters for this plant romanized typing)
-      const pressedChar = code.startsWith('Key') ? code.substring(3).toUpperCase() : '';
-
-      if (pressedChar) {
-        if (pressedChar === expectedChar) {
-          // Advance indices
-          if (currentCharIndex + 1 >= currentWord.node.romaji.length) {
-            // Word completed! Go to next hierarchy
-            setCurrentCharIndex(0);
-            setCurrentWordIndex(prev => (prev + 1) % practiceList.length);
-          } else {
-            setCurrentCharIndex(prev => prev + 1);
-          }
-        } else {
-          // 2. Typing Mistake (Wrong key typed)
-          setFlashError(true);
-          setTimeout(() => setFlashError(false), 150);
-        }
-      }
-
-      // Capture frame immediately for real-time mode.
-      // keystrokeIndex を worker へ渡し、応答を発火元キーストロークへ確実に紐付ける。
-      if (analysisMode === 'realtime' && keystrokeIndex >= 0 && isWorkerReady && worker && videoRef.current) {
-        const video = videoRef.current;
-        if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-          createImageBitmap(video).then(bitmap => {
-            const timestamp = performance.now() - sessionStartRef.current;
-            worker.postMessage({ type: 'DETECT', image: bitmap, timestamp, keystrokeIndex }, [bitmap]);
-          }).catch(err => console.error("Realtime frame capture failed:", err));
-        }
-      }
+      handleKeyCode(code);
+      captureRealtimeFrame(keystrokeIndex);
     }
-  }, [practiceList, currentWordIndex, currentCharIndex, analysisMode, isWorkerReady, worker]);
+  }, [captureRealtimeFrame, handleKeyCode]);
 
   useEffect(() => {
     handleKeyPressRef.current = handleKeyPress;
@@ -203,147 +143,33 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
   
   useEffect(() => {
     if (homography) {
-      engineRef.current = new TypingEngine(
+      engineRef.current = new TypingSession(
         layout,
         homography,
-        (code, idx) => handleKeyPressRef.current(code, idx),
         calibrationCameraSize
       );
     }
-    return () => {
-      if (engineRef.current) {
-        engineRef.current.destroy();
-      }
-    };
   }, [homography, layout, calibrationCameraSize]);
 
-  // Handle worker responses in real-time mode
-  useEffect(() => {
-    if (analysisMode !== 'realtime' || !worker || !isWorkerReady) return;
+  useEffect(() => subscribeKeyboardCapture(({ key, code, timestamp }) => {
+    const session = engineRef.current;
+    let keystrokeIndex = -1;
 
-    const handleWorkerMessage = (e: MessageEvent) => {
-      if (e.data.type === 'DETECT_RESULT') {
-        const { results, timestamp, keystrokeIndex } = e.data;
-        if (!engineRef.current) return;
+    if (session?.isSessionActive) {
+      keystrokeIndex = session.recordKeystroke(
+        key,
+        code,
+        timestamp - sessionStartRef.current
+      );
+    }
 
-        // Map results to HandData format using shared utility
-        const handsData = mapMediaPipeResults(results);
-
-        // Map to layout coordinates and process frame
-        const video = videoRef.current;
-        const videoWidth = video?.videoWidth || 640;
-        const videoHeight = video?.videoHeight || 480;
-        engineRef.current.processFrame(handsData, timestamp, videoWidth, videoHeight, isMirrored);
-
-        // keystrokeIndex で発火元キーストロークを確実に取得 (timestamp 近似に頼らない)
-        const match = typeof keystrokeIndex === 'number'
-          ? engineRef.current.getKeystrokeByIndex(keystrokeIndex)
-          : null;
-
-        if (match) {
-          // Get the frame we just appended (processFrame pushes synchronously to the tail)
-          const framesList = engineRef.current.getFrames();
-          const addedFrame: FrameLog | null = framesList.length > 0
-            ? framesList[framesList.length - 1]
-            : null;
-
-          if (addedFrame) {
-            const analysis = engineRef.current.analyzeKeystrokeRealtime(match, addedFrame);
-
-            const translateFinger = (f: string | string[]) => {
-              const map: Record<string, string> = {
-                LeftPinky: '左手小指', LeftRing: '左手薬指', LeftMiddle: '左手中指', LeftIndex: '左手人差し指', LeftThumb: '左手親指',
-                RightThumb: '右手親指', RightIndex: '右手人差し指', RightMiddle: '右手中指', RightRing: '右手薬指', RightPinky: '右手小指',
-                Unknown: '不明'
-              };
-              if (Array.isArray(f)) {
-                return f.map(x => map[x] || x).join(' または ');
-              }
-              return map[f] || f;
-            };
-
-            setRealtimeFeedback({
-              key: match.key,
-              isCorrect: !!analysis.isCorrectFinger,
-              expected: translateFinger(analysis.expectedFinger),
-              got: translateFinger(analysis.predictedFinger)
-            });
-          }
-        }
-      }
-    };
-
-    worker.addEventListener('message', handleWorkerMessage);
-    return () => {
-      worker.removeEventListener('message', handleWorkerMessage);
-    };
-  }, [analysisMode, worker, isWorkerReady, isMirrored]);
+    handleKeyPressRef.current(code, keystrokeIndex);
+  }), []);
 
   // 60fps main thread Hand Tracker Loop is removed to guarantee zero-latency.
   // Video capture is downscaled through a canvas before MediaRecorder to keep long sessions lighter.
 
-  const stopRecordingCapture = useCallback(() => {
-    if (recordingAnimationFrameRef.current !== null) {
-      cancelAnimationFrame(recordingAnimationFrameRef.current);
-      recordingAnimationFrameRef.current = null;
-    }
-
-    recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
-    recordingStreamRef.current = null;
-  }, []);
-
-  useEffect(() => stopRecordingCapture, [stopRecordingCapture]);
-
-  const startOfflineRecording = useCallback(() => {
-    const video = videoRef.current;
-    const canvas = recordingCanvasRef.current;
-    if (!video || !canvas) {
-      throw new Error('Recording video or canvas is not ready.');
-    }
-
-    const sourceWidth = video.videoWidth || 640;
-    const sourceHeight = video.videoHeight || 480;
-    recordingCameraSizeRef.current = calibrationCameraSize ?? { width: sourceWidth, height: sourceHeight };
-
-    const recordingSize = getRecordingSize(sourceWidth, sourceHeight);
-    canvas.width = recordingSize.width;
-    canvas.height = recordingSize.height;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      throw new Error('Could not create recording canvas context.');
-    }
-
-    const drawFrame = () => {
-      if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-        ctx.drawImage(video, 0, 0, recordingSize.width, recordingSize.height);
-      }
-      recordingAnimationFrameRef.current = requestAnimationFrame(drawFrame);
-    };
-    drawFrame();
-
-    const recordingStream = canvas.captureStream(RECORDING_FPS);
-    recordingStreamRef.current = recordingStream;
-
-    const mimeType = getSupportedRecordingMimeType();
-    const options: MediaRecorderOptions = {
-      videoBitsPerSecond: RECORDING_VIDEO_BITS_PER_SECOND
-    };
-    if (mimeType) options.mimeType = mimeType;
-
-    const recorder = new MediaRecorder(recordingStream, options);
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) recordedChunksRef.current.push(e.data);
-    };
-    recorder.start(1000);
-    mediaRecorderRef.current = recorder;
-
-    console.log(
-      `[Recording] Capturing ${sourceWidth}x${sourceHeight} as ${recordingSize.width}x${recordingSize.height} at ${RECORDING_FPS}fps.`
-    );
-  }, [calibrationCameraSize]);
-
-  const toggleRecording = () => {
+  const toggleRecording = async () => {
     if (!engineRef.current) return;
     
     if (isRecording) {
@@ -370,23 +196,13 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
         }
       };
 
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.onstop = () => {
-          const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
-          stopRecordingCapture();
-          finalizeSession(blob);
-        };
-        mediaRecorderRef.current.stop();
-      } else {
-        stopRecordingCapture();
-        finalizeSession(null);
-      }
+      const blob = await stopOfflineRecording();
+      finalizeSession(blob);
       
     } else {
       setRealtimeFeedback(null);
       
       if (analysisMode === 'offline' && stream) {
-        recordedChunksRef.current = [];
         try {
           startOfflineRecording();
         } catch (e) {
@@ -396,10 +212,9 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
       }
 
       sessionStartRef.current = performance.now();
-      engineRef.current.startSession(sessionStartRef.current);
+      engineRef.current.startSession();
       setIsRecording(true);
-      setCurrentWordIndex(0);
-      setCurrentCharIndex(0);
+      resetProgress();
     }
   };
 
@@ -419,48 +234,16 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
             className="trainer-camera-video"
             style={{ transform: isMirrored ? 'scaleX(-1)' : 'none' }}
           />
-          <canvas ref={recordingCanvasRef} style={{ display: 'none' }} />
+          <canvas ref={recordingCanvasRef} className="trainer-recording-canvas" />
         </div>
 
-        {/* Typing Word Display (Drill-down Drill) */}
         {isRecording && (
-          <div className={`trainer-word-display${flashError ? ' is-error' : ''}`}>
-            {/* Classification Path */}
-            <div className="trainer-word-path">
-              {practiceList[currentWordIndex]?.path}
-            </div>
-
-            {/* Japanese Label */}
-            <div className="trainer-word-japanese">
-              {practiceList[currentWordIndex]?.node.japanese}
-            </div>
-
-            {/* Romanized Text to Type */}
-            <div className="trainer-word-romaji">
-              <span className="trainer-romaji-typed">
-                {practiceList[currentWordIndex]?.node.romaji.slice(0, currentCharIndex)}
-              </span>
-              <span className="trainer-romaji-current">
-                {practiceList[currentWordIndex]?.node.romaji[currentCharIndex]}
-              </span>
-              <span className="trainer-romaji-remaining">
-                {practiceList[currentWordIndex]?.node.romaji.slice(currentCharIndex + 1)}
-              </span>
-            </div>
-            {realtimeFeedback && (
-              <div
-                className={`trainer-realtime-feedback${realtimeFeedback.isCorrect ? ' is-correct' : ' is-incorrect'}`}
-              >
-                {realtimeFeedback.isCorrect ? (
-                  <span>✓ 正しい指使いです！ ({realtimeFeedback.got})</span>
-                ) : (
-                  <span>
-                    ✗ 違います！ (想定: {realtimeFeedback.expected} → 検出: {realtimeFeedback.got})
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
+          <PracticeWordDisplay
+            entry={practiceList[currentWordIndex]}
+            currentCharIndex={currentCharIndex}
+            flashError={flashError}
+            realtimeFeedback={realtimeFeedback}
+          />
         )}
 
         <div className="trainer-keyboard-wrapper">
@@ -476,96 +259,25 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
 
       {/* Right Column: Controls & Plant Tree */}
       <div className="trainer-right-column">
+        <TrainerControls
+          hasCalibration={!!homography}
+          isRecording={isRecording}
+          cameraSource={cameraSource}
+          remoteStatus={remoteStatus}
+          offer={offer}
+          onCameraSourceChange={setCameraSource}
+          onSubmitAnswer={submitAnswer}
+          onRestartRemote={restartRemote}
+          practiceCategory={practiceCategory}
+          practiceCategoryLabels={practiceCategoryLabels}
+          onPracticeCategoryChange={handleSetPracticeCategory}
+          analysisMode={analysisMode}
+          onAnalysisModeChange={handleSetAnalysisMode}
+          isWorkerReady={isWorkerReady}
+          onToggleRecording={toggleRecording}
+        />
 
-        {/* Control Panel */}
-        <div className="trainer-control-panel">
-          {homography && (
-            <div className="trainer-calibration-status">
-              ✓ キャリブレーション有効
-            </div>
-          )}
-
-          {/* Camera Source Selector (PC内蔵 / スマホ) */}
-          {!isRecording && (
-            <CameraSourceSelector
-              source={cameraSource}
-              onSourceChange={setCameraSource}
-              remoteStatus={remoteStatus}
-              offer={offer}
-              onSubmitAnswer={submitAnswer}
-              onRestart={restartRemote}
-            />
-          )}
-
-          {/* Practice Category Selector */}
-          <div className="trainer-mode-selector">
-            <label className="trainer-mode-label">
-              練習カテゴリ
-            </label>
-            <div className="trainer-category-toggle">
-              {(Object.keys(practiceCategoryLabels) as PracticeCategory[]).map(cat => (
-                <button
-                  key={cat}
-                  disabled={isRecording}
-                  onClick={() => handleSetPracticeCategory(cat)}
-                  className={`trainer-category-btn${practiceCategory === cat ? ' is-active' : ''}`}
-                >
-                  {practiceCategoryLabels[cat]}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Mode Selector */}
-          <div className="trainer-mode-selector">
-            <label className="trainer-mode-label">
-              解析モード
-            </label>
-            <div className="trainer-mode-toggle">
-              <button
-                disabled={isRecording}
-                onClick={() => handleSetAnalysisMode('offline')}
-                className={`trainer-mode-btn${analysisMode === 'offline' ? ' is-active' : ''}`}
-              >
-                🎥 録画後解析
-              </button>
-              <button
-                disabled={isRecording}
-                onClick={() => handleSetAnalysisMode('realtime')}
-                className={`trainer-mode-btn${analysisMode === 'realtime' ? ' is-active' : ''}`}
-              >
-                ⚡️ 打鍵時即時
-              </button>
-            </div>
-            {!isWorkerReady && analysisMode === 'realtime' && (
-              <div className="trainer-model-loading">
-                ⚠️ AIモデル起動中...
-              </div>
-            )}
-          </div>
-
-          <button
-            onClick={toggleRecording}
-            disabled={analysisMode === 'realtime' && !isWorkerReady}
-            className={`trainer-record-btn${isRecording ? ' is-recording' : ''}`}
-          >
-            {isRecording ? '⏹ 練習終了して解析へ' : '⏺ タイピング練習開始'}
-          </button>
-
-          {isRecording && (
-            <div className="trainer-recording-hint">
-              好きな文字を入力してください。<br />
-              正しい指使いで入力すると、下の木が成長します。
-            </div>
-          )}
-        </div>
-
-        <div className="trainer-tree-panel">
-          <div>
-            <span className="trainer-tree-icon">🌲</span>
-            解析（Analysis）後に<br/>結果ツリーが表示されます
-          </div>
-        </div>
+        <TrainerTreePlaceholder />
       </div>
     </div>
   );

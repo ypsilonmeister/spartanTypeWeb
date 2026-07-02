@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import type { KeystrokeLog } from '../../utils/TypingEngine';
+import type { KeystrokeLog } from '../../types/session';
 
 interface HabitAnalyzerProps {
   keystrokes: KeystrokeLog[];

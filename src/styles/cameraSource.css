@@ -17,6 +17,65 @@ body.phone-camera-active #root {
   --cam-error: #ff4d4d;
 }
 
+.cam-source-full {
+  width: 100%;
+}
+
+.cam-source-toggle,
+.cam-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.cam-source-toggle.has-remote-margin {
+  margin-bottom: 1rem;
+}
+
+.cam-source-toggle-btn,
+.cam-action-main {
+  flex: 1;
+}
+
+.cam-source-toggle-btn.is-active {
+  background: linear-gradient(135deg, var(--cam-accent), #007a82);
+  border: none;
+}
+
+.cam-card-wide {
+  max-width: none;
+}
+
+.cam-step-label-spaced {
+  margin-top: 0.75rem;
+}
+
+.cam-step-label-large-spaced {
+  margin-top: 1.25rem;
+}
+
+.cam-qr-wrap {
+  display: flex;
+  justify-content: center;
+  margin: 0.75rem 0;
+}
+
+.cam-details-summary {
+  cursor: pointer;
+}
+
+.cam-actions {
+  margin-top: 0.75rem;
+}
+
+.cam-action-secondary {
+  flex: 0 0 auto;
+}
+
+.cam-hint-spaced,
+.cam-btn-spaced {
+  margin-top: 0.75rem;
+}
+
 .cam-page {
   /* モバイルのアドレスバー/ツールバー分を除いた実表示領域。dvh 非対応ブラウザは vh にフォールバック。 */
   min-height: 100vh;
@@ -134,5 +193,27 @@ body.phone-camera-active #root {
   color: #888;
   font-size: 0.85rem;
   line-height: 1.5;
+  text-align: center;
+}
+
+.qr-code-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.qr-code-canvas {
+  border-radius: 8px;
+  display: block;
+}
+
+.qr-code-canvas.is-hidden {
+  display: none;
+}
+
+.qr-code-warning {
+  color: #ffcc00;
+  font-size: 0.8rem;
   text-align: center;
 }

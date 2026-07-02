@@ -1,4 +1,4 @@
-import type { HandData } from './TypingEngine';
+import type { HandData } from '../types/session';
 
 /**
  * MediaPipe HandLandmarker の検出結果の最低限の型定義。

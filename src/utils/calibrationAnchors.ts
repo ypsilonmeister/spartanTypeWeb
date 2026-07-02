@@ -1,5 +1,8 @@
 import type { KeyboardLayout, Key } from '../types/kle';
 import type { Point } from './homography';
+import type { HandSide } from '../types/session';
+
+export type { HandSide } from '../types/session';
 
 /**
  * キャリブレーションの新方式 (配列選択 + ホームポジション + コーナー) で使う
@@ -23,7 +26,6 @@ export const FINGERTIP_LANDMARK = {
 } as const;
 
 export type FingerName = keyof typeof FINGERTIP_LANDMARK;
-export type HandSide = 'Left' | 'Right';
 
 /** ひとつのアンカーキー (どの手のどの指でどのキーを押さえるか)。 */
 export interface AnchorSpec {

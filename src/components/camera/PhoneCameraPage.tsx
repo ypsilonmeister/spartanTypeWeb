@@ -141,10 +141,9 @@ export const PhoneCameraPage: React.FC = () => {
             onChange={(e) => setOfferInput(e.target.value)}
           />
           <button
-            className="cam-btn"
             disabled={!offerInput.trim()}
             onClick={() => startConnection(offerInput.trim())}
-            style={{ marginTop: '0.75rem' }}
+            className="cam-btn cam-btn-spaced"
           >
             カメラを開始して接続
           </button>
@@ -163,11 +162,11 @@ export const PhoneCameraPage: React.FC = () => {
           <p className="cam-hint">
             この QR を PC のカメラで読み取るか、下のコードをコピーして PC に貼り付けてください。
           </p>
-          <div style={{ display: 'flex', justifyContent: 'center', margin: '0.75rem 0' }}>
+          <div className="cam-qr-wrap">
             <QRCodeView value={answer} size={220} />
           </div>
           <textarea className="cam-textarea" readOnly value={answer} onFocus={(e) => e.target.select()} />
-          <button className="cam-btn cam-btn-secondary" onClick={copyAnswer} style={{ marginTop: '0.75rem' }}>
+          <button className="cam-btn cam-btn-secondary cam-btn-spaced" onClick={copyAnswer}>
             {copied ? '✓ コピーしました' : '応答コードをコピー'}
           </button>
         </div>
@@ -184,12 +183,11 @@ export const PhoneCameraPage: React.FC = () => {
         <div className="cam-card">
           <div className="cam-status is-failed">{error}</div>
           <button
-            className="cam-btn"
+            className="cam-btn cam-btn-spaced"
             onClick={() => {
               setPhase('await-offer');
               setError(null);
             }}
-            style={{ marginTop: '0.75rem' }}
           >
             やり直す
           </button>

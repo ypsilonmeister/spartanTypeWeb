@@ -58,6 +58,10 @@
   transform: scaleX(-1);
 }
 
+.trainer-recording-canvas {
+  display: none;
+}
+
 /* ---- Typing Word Display ---- */
 .trainer-word-display {
   order: 1;

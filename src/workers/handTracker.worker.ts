@@ -1,4 +1,9 @@
 import { HandLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
+import {
+  HAND_LANDMARKER_OPTIONS,
+  MEDIAPIPE_WASM_URL,
+} from '../infra/handLandmarkerConfig';
+import type { WorkerRequest, WorkerResponse } from '../infra/workerProtocol';
 
 let landmarker: HandLandmarker | null = null;
 let isInitializing = false;
@@ -23,57 +28,57 @@ async function initLandmarker() {
   if (landmarker || isInitializing) return;
   isInitializing = true;
   try {
-    const vision = await FilesetResolver.forVisionTasks(
-      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm'
-    );
-    landmarker = await HandLandmarker.createFromOptions(vision, {
-      baseOptions: {
-        modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
-        delegate: 'GPU',
-      },
-      runningMode: 'VIDEO',
-      numHands: 2,
-      minHandDetectionConfidence: 0.5,
-      minHandPresenceConfidence: 0.5,
-      minTrackingConfidence: 0.5,
-    });
-    self.postMessage({ type: 'INIT_SUCCESS' });
+    const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_URL);
+    landmarker = await HandLandmarker.createFromOptions(vision, HAND_LANDMARKER_OPTIONS);
+    self.postMessage({ type: 'INIT_SUCCESS' } satisfies WorkerResponse);
   } catch (err) {
-    self.postMessage({ 
-      type: 'INIT_ERROR', 
-      error: err instanceof Error ? err.message : String(err) 
-    });
+    self.postMessage({
+      type: 'INIT_ERROR',
+      error: err instanceof Error ? err.message : String(err)
+    } satisfies WorkerResponse);
   } finally {
     isInitializing = false;
   }
 }
 
-self.onmessage = (e: MessageEvent) => {
-  const { type, image, timestamp, keystrokeIndex, requestId } = e.data;
+self.onmessage = (e: MessageEvent<WorkerRequest>) => {
+  const request = e.data;
 
-  if (type === 'INIT') {
+  if (request.type === 'INIT') {
     initLandmarker();
-  } else if (type === 'DETECT' && landmarker && image) {
+  } else if (request.type === 'DETECT' && landmarker && request.image) {
     try {
-      const detectTimestamp = getMonotonicDetectTimestamp(timestamp);
-      const results = landmarker.detectForVideo(image as ImageBitmap, detectTimestamp);
+      const detectTimestamp = getMonotonicDetectTimestamp(request.timestamp);
+      const results = landmarker.detectForVideo(request.image, detectTimestamp);
 
       // Post results back to main thread.
       // keystrokeIndex はリアルタイム解析で送られてきた場合のみ存在し、
       // 応答をトリガーとなったキーストロークへ確実に対応付けるために echo back する。
-      self.postMessage({ type: 'DETECT_RESULT', results, timestamp, keystrokeIndex, requestId });
+      self.postMessage({
+        type: 'DETECT_RESULT',
+        results,
+        timestamp: request.timestamp,
+        keystrokeIndex: request.keystrokeIndex,
+        requestId: request.requestId
+      } satisfies WorkerResponse);
     } catch (err) {
       console.error('Worker detection error:', err);
-      self.postMessage({ type: 'DETECT_ERROR', error: String(err), timestamp, keystrokeIndex, requestId });
+      self.postMessage({
+        type: 'DETECT_ERROR',
+        error: String(err),
+        timestamp: request.timestamp,
+        keystrokeIndex: request.keystrokeIndex,
+        requestId: request.requestId
+      } satisfies WorkerResponse);
     } finally {
       // Ensure we don't leak ImageBitmaps
-      if (image && typeof image.close === 'function') {
-        image.close();
+      if (typeof request.image.close === 'function') {
+        request.image.close();
       }
     }
-  } else if (type === 'DETECT' && image) {
-    if (typeof image.close === 'function') {
-      image.close();
+  } else if (request.type === 'DETECT' && request.image) {
+    if (typeof request.image.close === 'function') {
+      request.image.close();
     }
   }
 };

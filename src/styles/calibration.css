@@ -1,0 +1,237 @@
+.calibration-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  flex: 0 0 auto;
+  overflow: visible;
+  min-height: auto;
+}
+
+.calibration-main-row {
+  display: flex;
+  gap: 1.5rem;
+  width: 100%;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.calibration-camera-panel {
+  flex: 1 1 480px;
+  max-width: 640px;
+}
+
+.calibration-camera-preview {
+  border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.calibration-hidden-video {
+  display: none;
+}
+
+.calibration-canvas.is-draggable {
+  cursor: grab;
+}
+
+.calibration-canvas.is-dragging {
+  cursor: grabbing;
+}
+
+.calibration-source-wrap {
+  margin-top: 1rem;
+}
+
+.calibration-card {
+  flex: 1 1 320px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 270px;
+  box-sizing: border-box;
+}
+
+.calibration-step-label {
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  margin-bottom: 0.5rem;
+}
+
+.calibration-step-label.is-cyan {
+  color: #00adb5;
+}
+
+.calibration-step-label.is-magenta {
+  color: #ff007f;
+}
+
+.calibration-step-label.is-success {
+  color: #00ffcc;
+}
+
+.calibration-step-title {
+  font-size: 1.4rem;
+  margin: 0 0 1rem;
+  font-weight: 400;
+}
+
+.calibration-step-title.is-success {
+  color: #00ffcc;
+}
+
+.calibration-copy {
+  color: #ccc;
+  line-height: 1.6;
+  font-size: 1.05rem;
+  margin: 0 0 1rem;
+}
+
+.calibration-copy.is-muted {
+  color: #aaa;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin-bottom: 1.5rem;
+}
+
+.calibration-helper {
+  color: #888;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  margin: 1rem 0 0;
+}
+
+.calibration-btn {
+  width: 100%;
+  border: none;
+  color: #fff;
+  padding: 0.9rem;
+  border-radius: 50px;
+  font-weight: bold;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.calibration-btn.is-cyan {
+  background: linear-gradient(135deg, #00adb5, #007a82);
+  padding: 1rem;
+  font-size: 1.05rem;
+  box-shadow: 0 4px 15px rgba(0, 173, 181, 0.4);
+}
+
+.calibration-btn.is-magenta {
+  background: linear-gradient(135deg, #ff007f, #b30059);
+  box-shadow: 0 4px 15px rgba(255, 0, 127, 0.4);
+}
+
+.calibration-btn.is-success {
+  background: linear-gradient(135deg, #00ffcc, #00b38f);
+  color: #111;
+  padding: 1rem;
+  font-size: 1.05rem;
+  box-shadow: 0 4px 15px rgba(0, 255, 204, 0.4);
+}
+
+.calibration-btn.is-secondary {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 1rem;
+  font-size: 1.05rem;
+  transition: background 0.2s;
+}
+
+.calibration-action-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.calibration-layout-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.8rem;
+  margin-bottom: 1.5rem;
+}
+
+.calibration-preset-btn {
+  padding: 0.8rem 0.5rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #aaa;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: normal;
+  transition: all 0.2s;
+}
+
+.calibration-preset-btn.is-active {
+  background: rgba(0, 173, 181, 0.15);
+  border-color: #00adb5;
+  color: #00adb5;
+  font-weight: bold;
+}
+
+.calibration-preset-btn.is-wide {
+  grid-column: 1 / -1;
+}
+
+.calibration-upload-box {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.calibration-upload-label {
+  font-size: 0.85rem;
+  color: #ccc;
+}
+
+.calibration-file-input {
+  font-size: 0.85rem;
+  color: #aaa;
+  width: 100%;
+}
+
+.calibration-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #aaa;
+  cursor: pointer;
+  user-select: none;
+}
+
+.calibration-checkbox {
+  cursor: pointer;
+}
+
+.calibration-keyboard-guide {
+  position: relative;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 1.5rem;
+  border-radius: 16px;
+  display: inline-block;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  margin-top: 0.5rem;
+  max-width: 100%;
+  overflow-x: auto;
+  box-sizing: border-box;
+}

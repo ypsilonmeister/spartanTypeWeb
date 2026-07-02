@@ -35,10 +35,10 @@ export const QRCodeView: React.FC<QRCodeViewProps> = ({ value, size = 240 }) => 
   }, [value, size]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-      <canvas ref={canvasRef} style={{ borderRadius: '8px', display: tooLong ? 'none' : 'block' }} />
+    <div className="qr-code-view">
+      <canvas ref={canvasRef} className={`qr-code-canvas${tooLong ? ' is-hidden' : ''}`} />
       {tooLong && (
-        <div style={{ color: '#ffcc00', fontSize: '0.8rem', textAlign: 'center', maxWidth: size }}>
+        <div className="qr-code-warning" style={{ maxWidth: size }}>
           ⚠️ コードが長すぎて QR にできません。下のテキストをコピーして渡してください。
         </div>
       )}

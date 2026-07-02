@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { KeyboardLayout } from '../../types/kle';
-import type { SessionData, UnanalyzedSessionData } from '../../utils/TypingEngine';
+import type { SessionData, UnanalyzedSessionData } from '../../types/session';
 import { ScoreSummary } from './ScoreSummary';
 import { HabitAnalyzer } from './HabitAnalyzer';
 import { KeyboardHeatmap } from './KeyboardHeatmap';
@@ -12,13 +12,23 @@ interface DashboardScreenProps {
   layout: KeyboardLayout;
   initialUnanalyzedData?: UnanalyzedSessionData | null;
   initialAnalyzedData?: SessionData | null;
+  initialRecordingBlob?: Blob | null;
+  onAnalysisComplete: (data: SessionData) => void;
+  onSessionLoaded: (data: SessionData) => void;
 }
 
-export const DashboardScreen: React.FC<DashboardScreenProps> = ({ layout, initialUnanalyzedData, initialAnalyzedData }) => {
-  const [sessionData, setSessionData] = useState<SessionData | null>(initialAnalyzedData || null);
-  const [unanalyzedData, setUnanalyzedData] = useState<UnanalyzedSessionData | null>(initialUnanalyzedData || null);
-  const [recordingBlob, setRecordingBlob] = useState<Blob | null>(initialUnanalyzedData?.blob || null);
+export const DashboardScreen: React.FC<DashboardScreenProps> = ({
+  layout,
+  initialUnanalyzedData,
+  initialAnalyzedData,
+  initialRecordingBlob,
+  onAnalysisComplete,
+  onSessionLoaded,
+}) => {
   const [error, setError] = useState<string | null>(null);
+  const sessionData = initialAnalyzedData || null;
+  const unanalyzedData = initialUnanalyzedData || null;
+  const recordingBlob = initialRecordingBlob || initialUnanalyzedData?.blob || null;
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -34,9 +44,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ layout, initia
           throw new Error('Invalid session file format');
         }
         
-        setSessionData(data);
-        setRecordingBlob(null);
         setError(null);
+        onSessionLoaded(data);
       } catch (err) {
         console.error('Failed to parse session data:', err);
         setError('Failed to load session file. Ensure it is a valid spartan-session JSON.');
@@ -74,18 +83,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ layout, initia
     <div className="dashboard-container">
       <div className="dashboard-header">
         <h2>Session Analysis Dashboard</h2>
-        <div className="upload-section" style={{ display: 'flex', gap: '1rem' }}>
+        <div className="upload-section">
           {sessionData && (
             <button 
               onClick={handleExportJSON}
-              className="upload-btn"
-              style={{ 
-                background: 'linear-gradient(135deg, #00ffcc, #00adb5)', 
-                color: '#111', 
-                fontWeight: 'bold',
-                border: 'none',
-                cursor: 'pointer'
-              }}
+              className="upload-btn upload-btn-export-json"
             >
               Export Session JSON
             </button>
@@ -93,14 +95,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ layout, initia
           {recordingBlob && (
             <button
               onClick={handleExportRecording}
-              className="upload-btn"
-              style={{
-                background: 'linear-gradient(135deg, #ff007f, #b30059)',
-                color: '#fff',
-                fontWeight: 'bold',
-                border: 'none',
-                cursor: 'pointer'
-              }}
+              className="upload-btn upload-btn-export-recording"
             >
               Export Recording WebM
             </button>
@@ -111,7 +106,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ layout, initia
               type="file" 
               accept=".json" 
               onChange={handleFileUpload} 
-              style={{ display: 'none' }} 
+              className="visually-hidden-input"
             />
           </label>
         </div>
@@ -126,28 +121,24 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({ layout, initia
       )}
 
       {!sessionData && unanalyzedData && !error && (
-        <AnalysisPhase 
-          unanalyzedData={unanalyzedData} 
-          layout={layout} 
-          onAnalysisComplete={(data) => {
-            setSessionData(data);
-            setUnanalyzedData(null);
-            setRecordingBlob(unanalyzedData.blob);
-          }} 
+        <AnalysisPhase
+          unanalyzedData={unanalyzedData}
+          layout={layout}
+          onAnalysisComplete={onAnalysisComplete}
         />
       )}
 
       {sessionData && (
         <div className="dashboard-content">
-          <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', alignItems: 'stretch', width: '100%' }}>
+          <div className="dashboard-main-grid">
             {/* Left side: scores and habits */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', flex: '1 1 500px' }}>
+            <div className="dashboard-summary-column">
               <ScoreSummary keystrokes={sessionData.keystrokes} />
               <HabitAnalyzer keystrokes={sessionData.keystrokes} />
             </div>
             
             {/* Right side: generated tree */}
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '340px', flex: '0 0 340px' }}>
+            <div className="dashboard-tree-column">
               <PlantTreeCanvas 
                 correctCount={sessionData.keystrokes.filter(k => k.isCorrectFinger).length}
                 incorrectCount={sessionData.keystrokes.filter(k => !k.isCorrectFinger).length}
