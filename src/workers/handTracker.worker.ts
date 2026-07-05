@@ -1,6 +1,6 @@
 import { HandLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import {
-  HAND_LANDMARKER_OPTIONS,
+  createHandLandmarkerOptions,
   MEDIAPIPE_WASM_URL,
 } from '../infra/handLandmarkerConfig';
 import type { WorkerRequest, WorkerResponse } from '../infra/workerProtocol';
@@ -23,13 +23,31 @@ function getMonotonicDetectTimestamp(timestamp: number): number {
   return lastDetectTimestamp;
 }
 
-// Initialize the landmarker when the worker starts
+// Initialize the landmarker when the worker starts.
+// Android タブレット等では WebWorker 内の GPU デリゲート初期化が失敗しがちなので、
+// 失敗したら CPU デリゲートへフォールバックして解析を継続できるようにする。
 async function initLandmarker() {
   if (landmarker || isInitializing) return;
   isInitializing = true;
   try {
     const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_URL);
-    landmarker = await HandLandmarker.createFromOptions(vision, HAND_LANDMARKER_OPTIONS);
+
+    try {
+      landmarker = await HandLandmarker.createFromOptions(
+        vision,
+        createHandLandmarkerOptions('GPU')
+      );
+    } catch (gpuErr) {
+      console.warn(
+        'Worker GPU delegate init failed, falling back to CPU:',
+        gpuErr
+      );
+      landmarker = await HandLandmarker.createFromOptions(
+        vision,
+        createHandLandmarkerOptions('CPU')
+      );
+    }
+
     self.postMessage({ type: 'INIT_SUCCESS' } satisfies WorkerResponse);
   } catch (err) {
     self.postMessage({
