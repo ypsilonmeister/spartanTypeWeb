@@ -7,6 +7,7 @@ interface VideoFrameSourceOptions {
   video: HTMLVideoElement;
   canvas: HTMLCanvasElement;
   playbackRate: number;
+  expectedDurationSeconds?: number;
   shouldCaptureFrame: () => boolean;
   onFrame: (bitmap: ImageBitmap, timestamp: number) => void;
   onProgress: (progress: number) => void;
@@ -20,12 +21,26 @@ export interface VideoFrameSource {
   cancel: () => void;
 }
 
+export function calculatePlaybackProgress(
+  currentTime: number,
+  metadataDuration: number,
+  expectedDurationSeconds?: number
+): number {
+  const duration = Number.isFinite(metadataDuration) && metadataDuration > 0
+    ? metadataDuration
+    : expectedDurationSeconds;
+
+  if (!duration || duration <= 0) return 0;
+  return Math.min(100, Math.max(0, (currentTime / duration) * 100));
+}
+
 export function createVideoFrameSource(options: VideoFrameSourceOptions): VideoFrameSource {
   const {
     blob,
     video,
     canvas,
     playbackRate,
+    expectedDurationSeconds,
     shouldCaptureFrame,
     onFrame,
     onProgress,
@@ -38,6 +53,20 @@ export function createVideoFrameSource(options: VideoFrameSourceOptions): VideoF
   let ended = false;
   let lastProcessedTime = -1;
   const url = URL.createObjectURL(blob);
+
+  const getDuration = () => (
+    Number.isFinite(video.duration) && video.duration > 0
+      ? video.duration
+      : expectedDurationSeconds
+  );
+
+  const reportProgress = () => {
+    onProgress(calculatePlaybackProgress(
+      video.currentTime,
+      video.duration,
+      expectedDurationSeconds
+    ));
+  };
 
   const requestNextFrame = (callback: () => void) => {
     if ('requestVideoFrameCallback' in video) {
@@ -76,7 +105,7 @@ export function createVideoFrameSource(options: VideoFrameSourceOptions): VideoF
         .catch(onError);
     }
 
-    onProgress(Number.isFinite(video.duration) ? (video.currentTime / video.duration) * 100 : 0);
+    reportProgress();
     requestNextFrame(processVideoFrame);
   };
 
@@ -86,7 +115,7 @@ export function createVideoFrameSource(options: VideoFrameSourceOptions): VideoF
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
-    onLoaded(video.videoWidth, video.videoHeight, video.duration);
+    onLoaded(video.videoWidth, video.videoHeight, getDuration() ?? video.duration);
 
     video.playbackRate = playbackRate;
     video.play()
@@ -97,6 +126,7 @@ export function createVideoFrameSource(options: VideoFrameSourceOptions): VideoF
   const handleEnded = () => {
     if (ended) return;
     ended = true;
+    onProgress(100);
     onEnded();
   };
 

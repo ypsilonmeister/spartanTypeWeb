@@ -32,6 +32,7 @@ export interface SessionData {
 
 export interface UnanalyzedSessionData {
   blob: Blob | null;
+  recordingDurationMs?: number;
   keystrokes: KeystrokeLog[];
   homography: CalibrationHomography;
   calibrationCameraSize?: CalibrationCameraSize;

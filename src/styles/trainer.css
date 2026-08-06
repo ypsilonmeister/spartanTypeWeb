@@ -339,31 +339,9 @@
   line-height: 1.4;
 }
 
-/* ---- Tree Placeholder Panel ---- */
-.trainer-tree-panel {
-  flex: 1;
+.trainer-right-column .plant-tree-panel {
   width: 100%;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-lg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-muted);
-  font-size: 0.95rem;
-  line-height: 1.6;
-  text-align: center;
-}
-
-.trainer-layout.is-recording .trainer-tree-panel {
-  display: none;
-}
-
-.trainer-tree-icon {
-  font-size: 2rem;
-  display: block;
-  margin-bottom: var(--space-sm);
+  box-sizing: border-box;
 }
 
 @media (max-width: 1100px) {

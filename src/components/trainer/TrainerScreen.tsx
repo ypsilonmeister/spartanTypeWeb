@@ -12,7 +12,7 @@ import { useSessionRecorder } from '../../hooks/useSessionRecorder';
 import { useRealtimeFeedback } from '../../hooks/useRealtimeFeedback';
 import { PracticeWordDisplay } from './PracticeWordDisplay';
 import { TrainerControls } from './TrainerControls';
-import { TrainerTreePlaceholder } from './TrainerTreePlaceholder';
+import { PlantTreeCanvas } from '../tree/PlantTreeCanvas';
 import '../../styles/cameraPreview.css';
 import '../../styles/trainer.css';
 import type { CalibrationCameraSize, CalibrationHomography } from '../../types/calibration';
@@ -93,6 +93,9 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
     practiceList,
     currentWordIndex,
     currentCharIndex,
+    correctCount,
+    incorrectCount,
+    lastPressedKey,
     flashError,
     handleSetPracticeCategory,
     handleKeyCode,
@@ -173,6 +176,7 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
     if (!engineRef.current) return;
     
     if (isRecording) {
+      const recordingDurationMs = performance.now() - sessionStartRef.current;
       engineRef.current.stopSession();
       setIsRecording(false);
       
@@ -188,6 +192,7 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
         if (onSessionComplete) {
           onSessionComplete({
             blob,
+            recordingDurationMs,
             keystrokes: engineRef.current!.getRawKeystrokes(),
             homography: homography!,
             calibrationCameraSize: recordingCameraSizeRef.current ?? calibrationCameraSize,
@@ -277,7 +282,14 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
           onToggleRecording={toggleRecording}
         />
 
-        <TrainerTreePlaceholder />
+        <PlantTreeCanvas
+          correctCount={correctCount}
+          incorrectCount={incorrectCount}
+          lastPressedKey={lastPressedKey}
+          width={276}
+          height={300}
+          caption="Live Typing Tree"
+        />
       </div>
     </div>
   );

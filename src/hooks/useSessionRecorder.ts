@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { CalibrationCameraSize } from '../types/calibration';
+import { selectSupportedRecordingMimeType } from '../utils/mediaRecording';
 
 const RECORDING_MAX_WIDTH = 960;
 const RECORDING_FPS = 30;
@@ -17,16 +18,6 @@ const getRecordingSize = (sourceWidth: number, sourceHeight: number): Calibratio
     width: getEvenSize(RECORDING_MAX_WIDTH),
     height: getEvenSize(sourceHeight * scale)
   };
-};
-
-const getSupportedRecordingMimeType = () => {
-  const preferredTypes = [
-    'video/webm;codecs=vp8',
-    'video/webm;codecs=vp9',
-    'video/webm'
-  ];
-
-  return preferredTypes.find((type) => MediaRecorder.isTypeSupported(type));
 };
 
 interface UseSessionRecorderOptions {
@@ -90,7 +81,9 @@ export function useSessionRecorder({
     const recordingStream = canvas.captureStream(RECORDING_FPS);
     recordingStreamRef.current = recordingStream;
 
-    const mimeType = getSupportedRecordingMimeType();
+    const mimeType = typeof MediaRecorder.isTypeSupported === 'function'
+      ? selectSupportedRecordingMimeType(MediaRecorder.isTypeSupported.bind(MediaRecorder))
+      : undefined;
     const options: MediaRecorderOptions = {
       videoBitsPerSecond: RECORDING_VIDEO_BITS_PER_SECOND
     };
@@ -105,7 +98,8 @@ export function useSessionRecorder({
 
     console.log(
       `[Recording] Capturing ${sourceWidth}x${sourceHeight} as ` +
-      `${recordingSize.width}x${recordingSize.height} at ${RECORDING_FPS}fps.`
+      `${recordingSize.width}x${recordingSize.height} at ${RECORDING_FPS}fps ` +
+      `using ${recorder.mimeType || 'the browser default format'}.`
     );
   }, [calibrationCameraSize, videoRef]);
 
@@ -114,7 +108,10 @@ export function useSessionRecorder({
       const recorder = mediaRecorderRef.current;
       if (recorder && recorder.state !== 'inactive') {
         recorder.onstop = () => {
-          const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+          const recordedMimeType = recorder.mimeType
+            || recordedChunksRef.current.find((chunk) => chunk.type)?.type
+            || 'video/webm';
+          const blob = new Blob(recordedChunksRef.current, { type: recordedMimeType });
           stopRecordingCapture();
           mediaRecorderRef.current = null;
           resolve(blob);

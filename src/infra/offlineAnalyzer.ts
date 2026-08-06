@@ -132,6 +132,9 @@ export function runOfflineAnalysis(options: OfflineAnalysisOptions): OfflineAnal
     video,
     canvas,
     playbackRate: ANALYSIS_PLAYBACK_RATE,
+    expectedDurationSeconds: unanalyzedData.recordingDurationMs
+      ? unanalyzedData.recordingDurationMs / 1000
+      : undefined,
     shouldCaptureFrame: () => pendingFrames < MAX_PENDING_FRAMES,
     onFrame: (image, timestamp) => {
       pendingFrames++;

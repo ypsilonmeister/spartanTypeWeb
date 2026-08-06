@@ -6,6 +6,7 @@ interface PlantTreeCanvasProps {
   lastPressedKey?: string | null;
   width?: number;
   height?: number;
+  caption?: string;
 }
 
 interface Branch {
@@ -28,7 +29,8 @@ export const PlantTreeCanvas: React.FC<PlantTreeCanvasProps> = ({
   incorrectCount,
   lastPressedKey = null,
   width = 320,
-  height = 360
+  height = 360,
+  caption = 'Plant Classification Tree'
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [combos, setCombos] = useState(0);
@@ -38,7 +40,10 @@ export const PlantTreeCanvas: React.FC<PlantTreeCanvasProps> = ({
   const typedCharsRef = useRef<string[]>([]);
 
   useEffect(() => {
-    if (correctCount > prevCorrectCount.current) {
+    if (correctCount < prevCorrectCount.current || (correctCount === 0 && incorrectCount === 0)) {
+      setCombos(0);
+      typedCharsRef.current = [];
+    } else if (correctCount > prevCorrectCount.current) {
       // Correct type registered
       const diff = correctCount - prevCorrectCount.current;
       setCombos(prev => prev + diff);
@@ -246,7 +251,7 @@ export const PlantTreeCanvas: React.FC<PlantTreeCanvasProps> = ({
         className="plant-tree-canvas"
       />
       <div className="plant-tree-caption">
-        Plant Classification Tree
+        {caption}
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ import { HabitAnalyzer } from './HabitAnalyzer';
 import { KeyboardHeatmap } from './KeyboardHeatmap';
 import { PlantTreeCanvas } from '../tree/PlantTreeCanvas';
 import { AnalysisPhase } from './AnalysisPhase';
+import { getVideoFileExtension } from '../../utils/mediaRecording';
 import '../../styles/dashboard.css';
 
 interface DashboardScreenProps {
@@ -70,9 +71,10 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const handleExportRecording = () => {
     if (!recordingBlob) return;
     const url = URL.createObjectURL(recordingBlob);
+    const extension = getVideoFileExtension(recordingBlob.type);
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute('href', url);
-    downloadAnchor.setAttribute('download', `spartan-recording-${Date.now()}.webm`);
+    downloadAnchor.setAttribute('download', `spartan-recording-${Date.now()}.${extension}`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
@@ -97,7 +99,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
               onClick={handleExportRecording}
               className="upload-btn upload-btn-export-recording"
             >
-              Export Recording WebM
+              Export Recording Video
             </button>
           )}
           <label className="upload-btn">

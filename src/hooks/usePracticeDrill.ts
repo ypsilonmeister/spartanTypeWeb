@@ -9,6 +9,9 @@ export function usePracticeDrill() {
   });
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
+  const [correctCount, setCorrectCount] = useState(0);
+  const [incorrectCount, setIncorrectCount] = useState(0);
+  const [lastPressedKey, setLastPressedKey] = useState<string | null>(null);
   const [flashError, setFlashError] = useState(false);
   const flashTimeoutRef = useRef<number | null>(null);
 
@@ -20,6 +23,9 @@ export function usePracticeDrill() {
   const resetProgress = useCallback(() => {
     setCurrentWordIndex(0);
     setCurrentCharIndex(0);
+    setCorrectCount(0);
+    setIncorrectCount(0);
+    setLastPressedKey(null);
   }, []);
 
   const handleSetPracticeCategory = useCallback((category: PracticeCategory) => {
@@ -36,7 +42,10 @@ export function usePracticeDrill() {
     const pressedChar = code.startsWith('Key') ? code.substring(3).toUpperCase() : '';
     if (!pressedChar) return;
 
+    setLastPressedKey(pressedChar);
+
     if (pressedChar === expectedChar) {
+      setCorrectCount(prev => prev + 1);
       if (currentCharIndex + 1 >= currentWord.node.romaji.length) {
         setCurrentCharIndex(0);
         setCurrentWordIndex(prev => (prev + 1) % practiceList.length);
@@ -46,6 +55,7 @@ export function usePracticeDrill() {
       return;
     }
 
+    setIncorrectCount(prev => prev + 1);
     setFlashError(true);
     if (flashTimeoutRef.current !== null) {
       window.clearTimeout(flashTimeoutRef.current);
@@ -68,6 +78,9 @@ export function usePracticeDrill() {
     practiceList,
     currentWordIndex,
     currentCharIndex,
+    correctCount,
+    incorrectCount,
+    lastPressedKey,
     flashError,
     handleSetPracticeCategory,
     handleKeyCode,
