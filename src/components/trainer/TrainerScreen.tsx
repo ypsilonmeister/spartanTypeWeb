@@ -50,6 +50,9 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
   const [viewportWidth, setViewportWidth] = useState(() => (
     typeof window === 'undefined' ? 1200 : window.innerWidth
   ));
+  const [viewportHeight, setViewportHeight] = useState(() => (
+    typeof window === 'undefined' ? 800 : window.innerHeight
+  ));
 
   // MediaRecorder refs for post-session analysis
   const sessionStartRef = useRef(0);
@@ -114,8 +117,14 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
     const targetUnitSize = isRecording ? 56 : 42;
     const minimumUnitSize = isRecording ? 44 : 32;
 
-    return Math.max(minimumUnitSize, Math.min(targetUnitSize, fitUnitSize));
-  }, [isRecording, layout.width, viewportWidth]);
+    // Cap by viewport height too: on short/tablet screens the camera preview,
+    // word display and controls already take up most of the height, so the
+    // keyboard shouldn't grow to the width-only target and force scrolling.
+    const heightBudget = viewportHeight * (isRecording ? 0.42 : 0.3);
+    const heightUnitSize = Math.floor(heightBudget / layout.height);
+
+    return Math.max(minimumUnitSize, Math.min(targetUnitSize, fitUnitSize, heightUnitSize));
+  }, [isRecording, layout.width, layout.height, viewportWidth, viewportHeight]);
 
   const handleKeyPress = useCallback((code: string, keystrokeIndex: number) => {
     setPressedKeyCode(code);
@@ -136,6 +145,7 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
   useEffect(() => {
     const handleResize = () => {
       setViewportWidth(window.innerWidth);
+      setViewportHeight(window.innerHeight);
     };
 
     window.addEventListener('resize', handleResize);

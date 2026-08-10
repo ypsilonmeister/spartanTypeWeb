@@ -40,6 +40,10 @@
 
 .trainer-camera-preview {
   width: 100%;
+  /* Cap by viewport height (16:9 box) so the live monitor preview doesn't
+     dominate the screen on short/tablet viewports and push the keyboard
+     and controls out of view. */
+  max-width: min(100%, calc(32vh * 16 / 9));
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: var(--shadow-card-lg);
