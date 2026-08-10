@@ -1,5 +1,6 @@
 import { LAYOUT_PRESETS } from '../../assets/layoutTemplates';
 import type { LayoutPresetId } from '../../assets/layoutTemplates';
+import { useLanguage } from '../../hooks/useLanguage';
 
 interface CalibrationLayoutSelectStepProps {
   presetId: LayoutPresetId | 'custom';
@@ -19,16 +20,19 @@ export const CalibrationLayoutSelectStep = ({
   onUploadedIsSplitChange,
   onFileUpload,
   onStartCalibration,
-}: CalibrationLayoutSelectStepProps) => (
+}: CalibrationLayoutSelectStepProps) => {
+  const { t } = useLanguage();
+
+  return (
   <div>
     <div className="calibration-step-label is-cyan">
-      Step 1: 配列の選択
+      {t('calibration.step1Label')}
     </div>
     <h2 className="calibration-step-title">
-      キーボードの種類
+      {t('calibration.step1Title')}
     </h2>
     <p className="calibration-copy is-muted">
-      お使いのキーボード配列を選択してください。カスタムJSON（KLE / Vial）も読み込めます。
+      {t('calibration.step1Copy')}
     </p>
 
     <div className="calibration-layout-grid">
@@ -45,13 +49,13 @@ export const CalibrationLayoutSelectStep = ({
         onClick={() => onPresetChange('custom')}
         className={`calibration-preset-btn is-wide${presetId === 'custom' ? ' is-active' : ''}`}
       >
-        カスタム配列 (JSONファイル読込)
+        {t('calibration.customPreset')}
       </button>
     </div>
 
     {presetId === 'custom' && (
       <div className="calibration-upload-box">
-        <div className="calibration-upload-label">KLE / Vial のJSONファイルを選択:</div>
+        <div className="calibration-upload-label">{t('calibration.uploadLabel')}</div>
         <input
           type="file"
           accept=".json"
@@ -68,7 +72,7 @@ export const CalibrationLayoutSelectStep = ({
               onChange={(event) => onUploadedIsSplitChange(event.target.checked)}
               className="calibration-checkbox"
             />
-            スプリット配列 (左右分割キーボード)
+            {t('calibration.splitCheckbox')}
           </label>
         )}
       </div>
@@ -78,7 +82,8 @@ export const CalibrationLayoutSelectStep = ({
       onClick={onStartCalibration}
       className="calibration-btn is-cyan"
     >
-      決定してキャリブレーションへ
+      {t('calibration.startBtn')}
     </button>
   </div>
-);
+  );
+};

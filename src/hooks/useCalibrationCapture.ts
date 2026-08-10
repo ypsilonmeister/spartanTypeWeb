@@ -28,6 +28,7 @@ interface UseCalibrationCaptureOptions {
   isMirrored: boolean;
   latestHandsRef: RefObject<RawHand[]>;
   showToast: (message: string, type?: 'success' | 'error' | 'warning') => void;
+  t: (key: string, vars?: Record<string, string | number>) => string;
 }
 
 export function useCalibrationCapture({
@@ -36,6 +37,7 @@ export function useCalibrationCapture({
   isMirrored,
   latestHandsRef,
   showToast,
+  t,
 }: UseCalibrationCaptureOptions) {
   const [phase, setPhase] = useState<CalibrationPhase>('select');
   const [cornerStep, setCornerStep] = useState(0);
@@ -110,14 +112,16 @@ export function useCalibrationCapture({
       if (missing.length > 0) {
         const hint =
           anchors.length > 2
-            ? '両手をカメラに映してください。'
-            : `${anchors[0]?.hand === 'Left' ? '左手' : '右手'}をカメラに映してください。`;
-        showToast(`次の指が検知できませんでした: ${missing.join(' / ')}。${hint}`, 'warning');
+            ? t('calibration.hintBothHands')
+            : t('calibration.hintOneHand', {
+                hand: anchors[0]?.hand === 'Left' ? t('calibration.handLeft') : t('calibration.handRight'),
+              });
+        showToast(t('calibration.missingFingersToast', { missing: missing.join(' / '), hint }), 'warning');
         return null;
       }
       return result;
     },
-    [canvasRef, isMirrored, latestHandsRef, showToast]
+    [canvasRef, isMirrored, latestHandsRef, showToast, t]
   );
 
   const handleCaptureHome = useCallback(() => {
@@ -234,7 +238,10 @@ export function useCalibrationCapture({
 
   const currentCorner = cornerAnchors[cornerStep];
   const cornerInstruction = currentCorner
-    ? `${currentCorner.hand === 'Left' ? '左手' : '右手'}の小指で「${currentCorner.display}」キーを押さえ、任意のキーまたは下のボタンで記録してください。`
+    ? t('calibration.cornerInstruction', {
+        hand: currentCorner.hand === 'Left' ? t('calibration.handLeft') : t('calibration.handRight'),
+        display: currentCorner.display,
+      })
     : '';
 
   return {

@@ -9,6 +9,7 @@ import type { CalibrationCameraSize, CalibrationHomography } from '../../types/c
 import { useCalibrationCapture } from '../../hooks/useCalibrationCapture';
 import { useToast } from '../../hooks/useToast';
 import { useKeyboardLayout } from '../../hooks/useKeyboardLayout';
+import { useLanguage } from '../../hooks/useLanguage';
 import {
   useCalibrationHandRenderer,
   type CalibrationRawHand,
@@ -36,6 +37,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
   initialCustomLayoutData = null,
   initialCustomLayoutIsSplit = false,
 }) => {
+  const { t } = useLanguage();
   const { toasts, showToast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -79,6 +81,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
     isMirrored,
     latestHandsRef,
     showToast,
+    t,
   });
 
   useCalibrationHandRenderer({
@@ -116,11 +119,11 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
 
   const handleStartCalibration = useCallback(() => {
     if (presetId === 'custom' && !uploadedData) {
-      showToast('先にJSONファイルを読み込んでください。', 'warning');
+      showToast(t('calibration.toast.needJson'), 'warning');
       return;
     }
     beginCalibration();
-  }, [beginCalibration, presetId, uploadedData, showToast]);
+  }, [beginCalibration, presetId, uploadedData, showToast, t]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -134,7 +137,7 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
           parseKLE(parsed, false);
           setUploadedData(parsed);
           setUploadedIsSplit(false);
-          showToast('KLEレイアウト配列を読み込みました！', 'success');
+          showToast(t('calibration.toast.kleLoaded'), 'success');
         } else if (
           parsed &&
           typeof parsed === 'object' &&
@@ -144,16 +147,13 @@ export const CalibrationScreen: React.FC<CalibrationScreenProps> = ({
           parseLayoutJSON(text, true);
           setUploadedData(parsed);
           setUploadedIsSplit(true);
-          showToast('Vialキーマップを読み込みました！ (スプリット配列自動設定)', 'success');
+          showToast(t('calibration.toast.vialLoaded'), 'success');
         } else {
-          showToast(
-            '不明なレイアウト形式です。KLE配列またはVialのバックアップJSONを選択してください。',
-            'error'
-          );
+          showToast(t('calibration.toast.unknownFormat'), 'error');
         }
       } catch (err) {
         showToast(
-          'JSONファイルの読み込みに失敗しました。\n' +
+          t('calibration.toast.loadFailed') +
             (err instanceof Error ? err.message : String(err)),
           'error'
         );

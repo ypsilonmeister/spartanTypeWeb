@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import type { CameraSource, RemoteStatus } from '../../hooks/useCameraSource';
+import { useLanguage } from '../../hooks/useLanguage';
 import { QRCodeView } from './QRCodeView';
 import '../../styles/cameraSource.css';
 
@@ -18,13 +19,13 @@ function buildPhoneUrl(offer: string): string {
   return `${base}?camera=phone#${encodeURIComponent(offer)}`;
 }
 
-const STATUS_TEXT: Record<RemoteStatus, { text: string; cls: string }> = {
-  idle: { text: '', cls: '' },
-  offering: { text: '接続コードを生成中...', cls: 'is-waiting' },
-  waiting: { text: 'スマホからの応答を待っています', cls: 'is-waiting' },
-  connecting: { text: '接続中...', cls: 'is-waiting' },
-  connected: { text: '✓ スマホカメラに接続済み', cls: 'is-connected' },
-  failed: { text: '✗ 接続に失敗しました', cls: 'is-failed' },
+const STATUS_KEY: Record<RemoteStatus, { key: string; cls: string } | null> = {
+  idle: null,
+  offering: { key: 'camera.status.offering', cls: 'is-waiting' },
+  waiting: { key: 'camera.status.waiting', cls: 'is-waiting' },
+  connecting: { key: 'camera.status.connecting', cls: 'is-waiting' },
+  connected: { key: 'camera.status.connected', cls: 'is-connected' },
+  failed: { key: 'camera.status.failed', cls: 'is-failed' },
 };
 
 /**
@@ -40,9 +41,10 @@ export const CameraSourceSelector: React.FC<CameraSourceSelectorProps> = ({
   onSubmitAnswer,
   onRestart,
 }) => {
+  const { t } = useLanguage();
   const [answerInput, setAnswerInput] = useState('');
   const phoneUrl = useMemo(() => (offer ? buildPhoneUrl(offer) : null), [offer]);
-  const status = STATUS_TEXT[remoteStatus];
+  const statusEntry = STATUS_KEY[remoteStatus];
   const isConnected = remoteStatus === 'connected';
 
   return (
@@ -53,52 +55,51 @@ export const CameraSourceSelector: React.FC<CameraSourceSelectorProps> = ({
           className={`cam-btn cam-btn-secondary cam-source-toggle-btn${source === 'local' ? ' is-active' : ''}`}
           onClick={() => onSourceChange('local')}
         >
-          💻 PCのカメラ
+          {t('camera.pcCamera')}
         </button>
         <button
           className={`cam-btn cam-btn-secondary cam-source-toggle-btn${source === 'remote' ? ' is-active' : ''}`}
           onClick={() => onSourceChange('remote')}
         >
-          📱 スマホのカメラ
+          {t('camera.phoneCamera')}
         </button>
       </div>
 
       {source === 'remote' && (
         <div className="cam-card cam-card-wide">
-          {status.text && <div className={`cam-status ${status.cls}`}>{status.text}</div>}
+          {statusEntry && <div className={`cam-status ${statusEntry.cls}`}>{t(statusEntry.key)}</div>}
 
           {!isConnected && (
             <>
               <div className="cam-step-label cam-step-label-spaced">
-                手順 1: スマホでこの QR を読み取る
+                {t('camera.step1')}
               </div>
               <p className="cam-hint">
-                スマホのカメラアプリで読み取ると、スマホ側に接続ページが開きます。
-                （PC とスマホは同じ Wi-Fi に接続してください）
+                {t('camera.step1Hint')}
               </p>
               {phoneUrl ? (
                 <div className="cam-qr-wrap">
                   <QRCodeView value={phoneUrl} size={240} />
                 </div>
               ) : (
-                <div className="cam-status is-waiting">接続コード生成中...</div>
+                <div className="cam-status is-waiting">{t('camera.generatingCode')}</div>
               )}
               {phoneUrl && (
                 <details>
                   <summary className="cam-hint cam-details-summary">
-                    QR が読めない場合はこの URL を手動で開く
+                    {t('camera.manualUrlSummary')}
                   </summary>
                   <textarea className="cam-textarea" readOnly value={phoneUrl} onFocus={(e) => e.target.select()} />
                 </details>
               )}
 
               <div className="cam-step-label cam-step-label-large-spaced">
-                手順 2: スマホの「応答コード」を貼り付け
+                {t('camera.step2')}
               </div>
-              <p className="cam-hint">スマホ側に表示された応答コードをコピーして貼り付け、接続してください。</p>
+              <p className="cam-hint">{t('camera.step2Hint')}</p>
               <textarea
                 className="cam-textarea"
-                placeholder="スマホの応答コードをここに貼り付け"
+                placeholder={t('camera.answerPlaceholder')}
                 value={answerInput}
                 onChange={(e) => setAnswerInput(e.target.value)}
               />
@@ -108,10 +109,10 @@ export const CameraSourceSelector: React.FC<CameraSourceSelectorProps> = ({
                   disabled={!answerInput.trim()}
                   onClick={() => onSubmitAnswer(answerInput.trim())}
                 >
-                  接続する
+                  {t('camera.connectBtn')}
                 </button>
                 <button className="cam-btn cam-btn-secondary cam-action-secondary" onClick={onRestart}>
-                  やり直す
+                  {t('camera.retryBtn')}
                 </button>
               </div>
             </>
@@ -119,7 +120,7 @@ export const CameraSourceSelector: React.FC<CameraSourceSelectorProps> = ({
 
           {isConnected && (
             <p className="cam-hint cam-hint-spaced">
-              スマホの映像で解析します。スマホのタブは開いたままにしてください。
+              {t('camera.connectedHint')}
             </p>
           )}
         </div>

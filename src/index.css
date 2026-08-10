@@ -118,6 +118,30 @@ body {
   flex-shrink: 0;
 }
 
+.app-navbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.app-lang-toggle {
+  padding: 0.5rem 0.9rem;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-2);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  white-space: nowrap;
+  transition: var(--transition-std);
+}
+
+.app-lang-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
 /* ---- Content Area (below navbar, fills remaining height) ---- */
 .app-content {
   flex: 1;
@@ -263,6 +287,11 @@ body {
     margin-bottom: var(--space-lg);
   }
 
+  .app-navbar-right {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
   .app-nav-tabs {
     flex-wrap: wrap;
     justify-content: flex-end;
@@ -283,8 +312,13 @@ body {
     align-items: stretch;
   }
 
+  .app-navbar-right {
+    justify-content: space-between;
+  }
+
   .app-nav-tabs {
     justify-content: stretch;
+    flex: 1;
   }
 
   .app-nav-tab {

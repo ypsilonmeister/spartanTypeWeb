@@ -1,4 +1,5 @@
 import { CameraSourceSelector } from '../camera/CameraSourceSelector';
+import { useLanguage } from '../../hooks/useLanguage';
 import type { CameraSource, RemoteStatus } from '../../hooks/useCameraSource';
 import type { PracticeCategory } from '../../types/practice';
 
@@ -36,11 +37,14 @@ export const TrainerControls = ({
   onAnalysisModeChange,
   isWorkerReady,
   onToggleRecording,
-}: TrainerControlsProps) => (
+}: TrainerControlsProps) => {
+  const { t } = useLanguage();
+
+  return (
   <div className="trainer-control-panel">
     {hasCalibration && (
       <div className="trainer-calibration-status">
-        ✓ キャリブレーション有効
+        {t('trainer.calibrationActive')}
       </div>
     )}
 
@@ -57,7 +61,7 @@ export const TrainerControls = ({
 
     <div className="trainer-mode-selector">
       <label className="trainer-mode-label">
-        練習カテゴリ
+        {t('trainer.practiceCategory')}
       </label>
       <div className="trainer-category-toggle">
         {(Object.keys(practiceCategoryLabels) as PracticeCategory[]).map(cat => (
@@ -75,7 +79,7 @@ export const TrainerControls = ({
 
     <div className="trainer-mode-selector">
       <label className="trainer-mode-label">
-        解析モード
+        {t('trainer.analysisMode')}
       </label>
       <div className="trainer-mode-toggle">
         <button
@@ -83,19 +87,19 @@ export const TrainerControls = ({
           onClick={() => onAnalysisModeChange('offline')}
           className={`trainer-mode-btn${analysisMode === 'offline' ? ' is-active' : ''}`}
         >
-          🎥 録画後解析
+          {t('trainer.modeOffline')}
         </button>
         <button
           disabled={isRecording}
           onClick={() => onAnalysisModeChange('realtime')}
           className={`trainer-mode-btn${analysisMode === 'realtime' ? ' is-active' : ''}`}
         >
-          ⚡️ 打鍵時即時
+          {t('trainer.modeRealtime')}
         </button>
       </div>
       {!isWorkerReady && analysisMode === 'realtime' && (
         <div className="trainer-model-loading">
-          ⚠️ AIモデル起動中...
+          {t('trainer.modelLoading')}
         </div>
       )}
     </div>
@@ -105,14 +109,15 @@ export const TrainerControls = ({
       disabled={analysisMode === 'realtime' && !isWorkerReady}
       className={`trainer-record-btn${isRecording ? ' is-recording' : ''}`}
     >
-      {isRecording ? '⏹ 練習終了して解析へ' : '⏺ タイピング練習開始'}
+      {isRecording ? t('trainer.stopBtn') : t('trainer.startBtn')}
     </button>
 
     {isRecording && (
       <div className="trainer-recording-hint">
-        好きな文字を入力してください。<br />
-        正しい指使いで入力すると、下の木が成長します。
+        {t('trainer.recordingHintLine1')}<br />
+        {t('trainer.recordingHintLine2')}
       </div>
     )}
   </div>
-);
+  );
+};

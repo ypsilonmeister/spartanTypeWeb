@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPeerConnection, createGuestAnswer } from '../../utils/webrtcSignaling';
+import { useLanguage } from '../../hooks/useLanguage';
 import { QRCodeView } from './QRCodeView';
 import '../../styles/cameraSource.css';
 
@@ -14,6 +15,7 @@ import '../../styles/cameraSource.css';
  * PC・スマホとも解析は行わない。スマホはあくまで「上からのカメラ」役。
  */
 export const PhoneCameraPage: React.FC = () => {
+  const { t } = useLanguage();
   const videoRef = useRef<HTMLVideoElement>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -71,7 +73,7 @@ export const PhoneCameraPage: React.FC = () => {
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === 'connected') setPhase('connected');
         else if (['failed', 'closed'].includes(pc.connectionState)) {
-          setError('接続が切断されました。');
+          setError(t('phone.disconnected'));
           setPhase('error');
         }
       };
@@ -83,12 +85,12 @@ export const PhoneCameraPage: React.FC = () => {
       console.error('Phone camera connection failed:', err);
       setError(
         err instanceof Error
-          ? `${err.message}（カメラ権限を許可し、HTTPS でアクセスしているか確認してください）`
-          : 'カメラの取得または接続に失敗しました。'
+          ? `${err.message}${t('phone.connectionFailedSuffix')}`
+          : t('phone.connectionFailedGeneric')
       );
       setPhase('error');
     }
-  }, []);
+  }, [t]);
 
   // hash に offer があれば自動開始 (マウント時に一度だけ)。
   // startConnection は getUserMedia 等の外部システム起動を伴う非同期処理で、
@@ -121,7 +123,7 @@ export const PhoneCameraPage: React.FC = () => {
 
   return (
     <div className="cam-source cam-page">
-      <h1>📱 スマホカメラ接続</h1>
+      <h1>{t('phone.title')}</h1>
 
       <div className="cam-card">
         <video ref={videoRef} className="cam-video" autoPlay playsInline muted />
@@ -129,14 +131,13 @@ export const PhoneCameraPage: React.FC = () => {
 
       {phase === 'await-offer' && (
         <div className="cam-card">
-          <div className="cam-step-label">手順 1: 接続コードを貼り付け</div>
+          <div className="cam-step-label">{t('phone.step1')}</div>
           <p className="cam-hint">
-            PC 側に表示された「接続コード」を貼り付けて開始してください。
-            （QR から開いた場合は自動で進みます）
+            {t('phone.step1Hint')}
           </p>
           <textarea
             className="cam-textarea"
-            placeholder="PC の接続コードをここに貼り付け"
+            placeholder={t('phone.offerPlaceholder')}
             value={offerInput}
             onChange={(e) => setOfferInput(e.target.value)}
           />
@@ -145,37 +146,37 @@ export const PhoneCameraPage: React.FC = () => {
             onClick={() => startConnection(offerInput.trim())}
             className="cam-btn cam-btn-spaced"
           >
-            カメラを開始して接続
+            {t('phone.startBtn')}
           </button>
         </div>
       )}
 
       {phase === 'starting' && (
         <div className="cam-card">
-          <div className="cam-status is-waiting">接続準備中...（カメラ権限を許可してください）</div>
+          <div className="cam-status is-waiting">{t('phone.starting')}</div>
         </div>
       )}
 
       {phase === 'answer' && answer && (
         <div className="cam-card">
-          <div className="cam-step-label">手順 2: 応答コードを PC に渡す</div>
+          <div className="cam-step-label">{t('phone.step2')}</div>
           <p className="cam-hint">
-            この QR を PC のカメラで読み取るか、下のコードをコピーして PC に貼り付けてください。
+            {t('phone.step2Hint')}
           </p>
           <div className="cam-qr-wrap">
             <QRCodeView value={answer} size={220} />
           </div>
           <textarea className="cam-textarea" readOnly value={answer} onFocus={(e) => e.target.select()} />
           <button className="cam-btn cam-btn-secondary cam-btn-spaced" onClick={copyAnswer}>
-            {copied ? '✓ コピーしました' : '応答コードをコピー'}
+            {copied ? t('phone.copied') : t('phone.copyBtn')}
           </button>
         </div>
       )}
 
       {phase === 'connected' && (
         <div className="cam-card">
-          <div className="cam-status is-connected">✓ 接続完了！ PC に映像を送信中です。</div>
-          <p className="cam-hint">このタブは開いたままにしてください。閉じると映像が止まります。</p>
+          <div className="cam-status is-connected">{t('phone.connected')}</div>
+          <p className="cam-hint">{t('phone.connectedHint')}</p>
         </div>
       )}
 
@@ -189,7 +190,7 @@ export const PhoneCameraPage: React.FC = () => {
               setError(null);
             }}
           >
-            やり直す
+            {t('phone.retryBtn')}
           </button>
         </div>
       )}

@@ -1,4 +1,5 @@
 import type { FlatWord, PracticeCategory } from '../../types/practice';
+import type { Lang } from '../../types/i18n';
 
 export const programmerWords: FlatWord[] = [
   // 基本コマンド
@@ -85,8 +86,87 @@ export const beginnerWords: FlatWord[] = [
   { japanese: 'たいよう', romaji: 'TAIYOU', path: 'やさしいことば' }
 ];
 
-export const practiceCategoryLabels: Record<PracticeCategory, string> = {
-  plant: '🌱 植物の名前',
-  programmer: '💻 プログラマー',
-  beginner: 'あ 初級（あいうえお）'
+export const programmerWordsEn: FlatWord[] = [
+  // Basic commands
+  { japanese: 'output text', romaji: 'PRINT', path: 'basic commands' },
+  { japanese: 'return a value', romaji: 'RETURN', path: 'basic commands' },
+  { japanese: 'define a function', romaji: 'FUNCTION', path: 'basic commands' },
+  { japanese: 'a variable', romaji: 'VARIABLE', path: 'basic commands' },
+  { japanese: 'a constant', romaji: 'CONST', path: 'basic commands' },
+  { japanese: 'import a module', romaji: 'IMPORT', path: 'basic commands' },
+  { japanese: 'export a module', romaji: 'EXPORT', path: 'basic commands' },
+  { japanese: 'conditional branch', romaji: 'IF', path: 'control flow' },
+  { japanese: 'otherwise', romaji: 'ELSE', path: 'control flow' },
+  { japanese: 'for loop', romaji: 'FOR', path: 'control flow' },
+  { japanese: 'while loop', romaji: 'WHILE', path: 'control flow' },
+  { japanese: 'exit a loop', romaji: 'BREAK', path: 'control flow' },
+  { japanese: 'skip to next iteration', romaji: 'CONTINUE', path: 'control flow' },
+  { japanese: 'boolean true', romaji: 'TRUE', path: 'values' },
+  { japanese: 'boolean false', romaji: 'FALSE', path: 'values' },
+  { japanese: 'empty value', romaji: 'NULL', path: 'values' },
+  { japanese: 'a list of items', romaji: 'ARRAY', path: 'data' },
+  { japanese: 'text data', romaji: 'STRING', path: 'data' },
+  { japanese: 'numeric data', romaji: 'NUMBER', path: 'data' },
+  { japanese: 'a data object', romaji: 'OBJECT', path: 'data' },
+  { japanese: 'a class', romaji: 'CLASS', path: 'data' },
+  // Tools & concepts
+  { japanese: 'source code', romaji: 'CODE', path: 'concepts' },
+  { japanese: 'a bug', romaji: 'BUG', path: 'concepts' },
+  { japanese: 'find & fix bugs', romaji: 'DEBUG', path: 'concepts' },
+  { japanese: 'compile code', romaji: 'COMPILE', path: 'concepts' },
+  { japanese: 'a server', romaji: 'SERVER', path: 'concepts' },
+  { japanese: 'data', romaji: 'DATA', path: 'concepts' },
+  { japanese: 'a file', romaji: 'FILE', path: 'concepts' },
+  { japanese: 'a key', romaji: 'KEY', path: 'concepts' },
+  { japanese: 'a value', romaji: 'VALUE', path: 'concepts' },
+  { japanese: 'a loop', romaji: 'LOOP', path: 'concepts' }
+];
+
+export const beginnerWordsEn: FlatWord[] = [
+  // Single letters, five at a time
+  { japanese: 'A', romaji: 'A', path: 'A-E' },
+  { japanese: 'B', romaji: 'B', path: 'A-E' },
+  { japanese: 'C', romaji: 'C', path: 'A-E' },
+  { japanese: 'D', romaji: 'D', path: 'A-E' },
+  { japanese: 'E', romaji: 'E', path: 'A-E' },
+  { japanese: 'F', romaji: 'F', path: 'F-J' },
+  { japanese: 'G', romaji: 'G', path: 'F-J' },
+  { japanese: 'H', romaji: 'H', path: 'F-J' },
+  { japanese: 'I', romaji: 'I', path: 'F-J' },
+  { japanese: 'J', romaji: 'J', path: 'F-J' },
+  { japanese: 'K', romaji: 'K', path: 'K-O' },
+  { japanese: 'L', romaji: 'L', path: 'K-O' },
+  { japanese: 'M', romaji: 'M', path: 'K-O' },
+  { japanese: 'N', romaji: 'N', path: 'K-O' },
+  { japanese: 'O', romaji: 'O', path: 'K-O' },
+  { japanese: 'P', romaji: 'P', path: 'P-T' },
+  { japanese: 'Q', romaji: 'Q', path: 'P-T' },
+  { japanese: 'R', romaji: 'R', path: 'P-T' },
+  { japanese: 'S', romaji: 'S', path: 'P-T' },
+  { japanese: 'T', romaji: 'T', path: 'P-T' },
+  { japanese: 'U', romaji: 'U', path: 'U-Z' },
+  { japanese: 'V', romaji: 'V', path: 'U-Z' },
+  { japanese: 'W', romaji: 'W', path: 'U-Z' },
+  { japanese: 'X', romaji: 'X', path: 'U-Z' },
+  { japanese: 'Y', romaji: 'Y', path: 'U-Z' },
+  { japanese: 'Z', romaji: 'Z', path: 'U-Z' },
+  // Simple words
+  { japanese: 'blue', romaji: 'BLUE', path: 'simple words' },
+  { japanese: 'red', romaji: 'RED', path: 'simple words' },
+  { japanese: 'dog', romaji: 'DOG', path: 'simple words' },
+  { japanese: 'cat', romaji: 'CAT', path: 'simple words' },
+  { japanese: 'sea', romaji: 'SEA', path: 'simple words' },
+  { japanese: 'sky', romaji: 'SKY', path: 'simple words' },
+  { japanese: 'flower', romaji: 'FLOWER', path: 'simple words' },
+  { japanese: 'mountain', romaji: 'MOUNTAIN', path: 'simple words' },
+  { japanese: 'water', romaji: 'WATER', path: 'simple words' },
+  { japanese: 'star', romaji: 'STAR', path: 'simple words' },
+  { japanese: 'moon', romaji: 'MOON', path: 'simple words' },
+  { japanese: 'sun', romaji: 'SUN', path: 'simple words' }
+];
+
+/** Categories available per UI language; 'plant' is Japanese-kana content, so it's Japanese-only. */
+export const availableCategoriesByLang: Record<Lang, PracticeCategory[]> = {
+  ja: ['plant', 'programmer', 'beginner'],
+  en: ['beginner', 'programmer']
 };

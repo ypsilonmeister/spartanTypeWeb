@@ -3,6 +3,7 @@ import { CalibrationScreen } from './components/calibration/CalibrationScreen';
 import { DashboardScreen } from './components/dashboard/DashboardScreen';
 import { PhoneCameraPage } from './components/camera/PhoneCameraPage';
 import { useAppSession } from './hooks/useAppSession';
+import { useLanguage } from './hooks/useLanguage';
 import './App.css';
 
 function App() {
@@ -26,34 +27,45 @@ function MainApp() {
     customLayoutIsSplit,
     actions,
   } = useAppSession();
+  const { lang, setLang, t } = useLanguage();
 
   return (
     <div className="app-shell">
       {/* Navigation Bar */}
       <nav className="app-navbar">
         <h1 className="app-logo">SpartanType Web</h1>
-        <div className="app-nav-tabs">
+        <div className="app-navbar-right">
+          <div className="app-nav-tabs">
+            <button
+              id="nav-calibration"
+              className={`app-nav-tab${mode === 'calibration' ? ' is-active' : ''}`}
+              onClick={actions.showCalibration}
+            >
+              {t('nav.calibration')}
+            </button>
+            <button
+              id="nav-trainer"
+              className={`app-nav-tab${mode === 'trainer' ? ' is-active' : ''}`}
+              onClick={actions.showTrainer}
+              disabled={!homography}
+            >
+              {t('nav.trainer')}
+            </button>
+            <button
+              id="nav-dashboard"
+              className={`app-nav-tab${mode === 'dashboard' ? ' is-active' : ''}`}
+              onClick={actions.showDashboard}
+            >
+              {t('nav.dashboard')}
+            </button>
+          </div>
           <button
-            id="nav-calibration"
-            className={`app-nav-tab${mode === 'calibration' ? ' is-active' : ''}`}
-            onClick={actions.showCalibration}
+            id="nav-lang-toggle"
+            className="app-lang-toggle"
+            onClick={() => setLang(lang === 'ja' ? 'en' : 'ja')}
+            title={t('nav.langToggleHint')}
           >
-            Calibration
-          </button>
-          <button
-            id="nav-trainer"
-            className={`app-nav-tab${mode === 'trainer' ? ' is-active' : ''}`}
-            onClick={actions.showTrainer}
-            disabled={!homography}
-          >
-            Trainer
-          </button>
-          <button
-            id="nav-dashboard"
-            className={`app-nav-tab${mode === 'dashboard' ? ' is-active' : ''}`}
-            onClick={actions.showDashboard}
-          >
-            Dashboard
+            {lang === 'ja' ? '🇯🇵 JA' : '🇺🇸 EN'}
           </button>
         </div>
       </nav>

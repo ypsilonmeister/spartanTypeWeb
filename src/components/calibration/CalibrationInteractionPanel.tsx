@@ -1,6 +1,7 @@
 import type { LayoutPresetId } from '../../assets/layoutTemplates';
 import type { CalibrationPhase } from '../../types/calibrationFlow';
 import type { ResolvedAnchor } from '../../utils/calibrationAnchors';
+import { useLanguage } from '../../hooks/useLanguage';
 import { CalibrationLayoutSelectStep } from './CalibrationLayoutSelectStep';
 
 interface CalibrationInteractionPanelProps {
@@ -39,7 +40,10 @@ export const CalibrationInteractionPanel = ({
   onCaptureCorner,
   onComplete,
   onReset,
-}: CalibrationInteractionPanelProps) => (
+}: CalibrationInteractionPanelProps) => {
+  const { t } = useLanguage();
+
+  return (
   <div className="calibration-card">
     {phase === 'select' && (
       <CalibrationLayoutSelectStep
@@ -56,23 +60,22 @@ export const CalibrationInteractionPanel = ({
     {phase === 'home' && (
       <div>
         <div className="calibration-step-label is-magenta">
-          Step 2: ホームポジション
+          {t('calibration.step2Label')}
         </div>
         <h2 className="calibration-step-title">
-          両手をホームに置く
+          {t('calibration.step2Title')}
         </h2>
         <p className="calibration-copy">
-          左手を <b>F D S A</b>、右手を <b>J K L ;</b> に正しい指で同時に置き、
-          任意のキーまたは下のボタンで記録してください。
+          {t('calibration.step2CopyPre')}<b>F D S A</b>{t('calibration.step2CopyMid')}<b>J K L ;</b>{t('calibration.step2CopySuf')}
         </p>
         <button
           onClick={onCaptureHome}
           className="calibration-btn is-magenta"
         >
-          8本指を記録する
+          {t('calibration.captureHomeBtn')}
         </button>
         <p className="calibration-helper">
-          ※ 両手の8指すべてがカメラに映っている必要があります。
+          {t('calibration.homeHelper')}
         </p>
       </div>
     )}
@@ -80,11 +83,14 @@ export const CalibrationInteractionPanel = ({
     {phase === 'corners' && (
       <div>
         <div className="calibration-step-label is-magenta">
-          Step 3: 縦アンカー ({cornerStep + 1} / {cornerAnchorsLength})
+          {t('calibration.step3LabelCounted', { step: cornerStep + 1, total: cornerAnchorsLength })}
         </div>
         <h2 className="calibration-step-title">
           {currentCorner
-            ? `${currentCorner.hand === 'Left' ? '左手' : '右手'}: ${currentCorner.display}`
+            ? t('calibration.cornerTitle', {
+                hand: currentCorner.hand === 'Left' ? t('calibration.handLeft') : t('calibration.handRight'),
+                display: currentCorner.display,
+              })
             : ''}
         </h2>
         <p className="calibration-copy">
@@ -94,7 +100,9 @@ export const CalibrationInteractionPanel = ({
           onClick={onCaptureCorner}
           className="calibration-btn is-magenta"
         >
-          {currentCorner ? `${currentCorner.display} を記録する` : '記録する'}
+          {currentCorner
+            ? t('calibration.captureCornerBtnFor', { display: currentCorner.display })
+            : t('calibration.captureCornerBtnGeneric')}
         </button>
       </div>
     )}
@@ -102,14 +110,13 @@ export const CalibrationInteractionPanel = ({
     {phase === 'complete' && (
       <div>
         <div className="calibration-step-label is-success">
-          キャリブレーション完了
+          {t('calibration.completeLabel')}
         </div>
         <h2 className="calibration-step-title is-success">
-          調整完了！
+          {t('calibration.completeTitle')}
         </h2>
         <p className="calibration-copy is-muted">
-          キーを押したとき、下の仮想キーボードにポインター（円）が正しく追従するかテストしてください。
-          ずれている点はカメラ映像上でドラッグして微調整できます。
+          {t('calibration.completeCopy')}
         </p>
 
         <div className="calibration-action-stack">
@@ -117,16 +124,17 @@ export const CalibrationInteractionPanel = ({
             onClick={onComplete}
             className="calibration-btn is-success"
           >
-            この設定で練習を開始する
+            {t('calibration.completeStartBtn')}
           </button>
           <button
             onClick={onReset}
             className="calibration-btn is-secondary"
           >
-            やり直す (Reset)
+            {t('calibration.resetBtn')}
           </button>
         </div>
       </div>
     )}
   </div>
-);
+  );
+};

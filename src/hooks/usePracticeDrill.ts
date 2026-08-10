@@ -1,12 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getPracticeList, practiceCategoryLabels } from '../domain/practiceList';
+import { availableCategoriesByLang, getPracticeList } from '../domain/practiceList';
+import { useLanguage } from './useLanguage';
 import type { PracticeCategory } from '../types/practice';
 
 export function usePracticeDrill() {
+  const { lang, t } = useLanguage();
+  const availableCategories = availableCategoriesByLang[lang];
+
   const [practiceCategory, setPracticeCategory] = useState<PracticeCategory>(() => {
     const saved = localStorage.getItem('spartan_practice_category');
-    return (saved === 'programmer' || saved === 'beginner') ? saved : 'plant';
+    const isValid = saved === 'plant' || saved === 'programmer' || saved === 'beginner';
+    return (isValid && availableCategories.includes(saved)) ? saved : availableCategories[0];
   });
+
+  // If the stored category isn't offered in this language (e.g. 'plant' when the
+  // browser is set to English), fall back to the first available one. Derived
+  // directly during render rather than via an effect + setState round-trip.
+  const effectiveCategory = availableCategories.includes(practiceCategory)
+    ? practiceCategory
+    : availableCategories[0];
+
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
@@ -15,9 +28,16 @@ export function usePracticeDrill() {
   const [flashError, setFlashError] = useState(false);
   const flashTimeoutRef = useRef<number | null>(null);
 
+  const practiceCategoryLabels = useMemo(
+    () => Object.fromEntries(
+      availableCategories.map(cat => [cat, t(`category.${cat}`)])
+    ) as Record<PracticeCategory, string>,
+    [availableCategories, t]
+  );
+
   const practiceList = useMemo(
-    () => getPracticeList(practiceCategory, { shuffle: true }),
-    [practiceCategory]
+    () => getPracticeList(effectiveCategory, lang, { shuffle: true }),
+    [effectiveCategory, lang]
   );
 
   const resetProgress = useCallback(() => {
@@ -73,7 +93,7 @@ export function usePracticeDrill() {
   }, []);
 
   return {
-    practiceCategory,
+    practiceCategory: effectiveCategory,
     practiceCategoryLabels,
     practiceList,
     currentWordIndex,

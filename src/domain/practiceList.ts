@@ -1,9 +1,12 @@
 import { plantDictionary } from '../assets/dictionaries/plantDictionaryData';
 import {
+  availableCategoriesByLang,
   beginnerWords,
-  practiceCategoryLabels,
+  beginnerWordsEn,
   programmerWords,
+  programmerWordsEn,
 } from '../assets/dictionaries/practiceWords';
+import type { Lang } from '../types/i18n';
 import type {
   FlatWord,
   PlantNode,
@@ -11,7 +14,7 @@ import type {
   PracticeEntry,
 } from '../types/practice';
 
-export { practiceCategoryLabels };
+export { availableCategoriesByLang };
 export type { PlantNode, PracticeCategory, PracticeEntry };
 
 export function getFlatPracticeList(
@@ -72,13 +75,14 @@ function shuffleEntries<T>(entries: T[], shouldShuffle = false): T[] {
 
 export function getPracticeList(
   category: PracticeCategory,
+  lang: Lang,
   options: { shuffle?: boolean } = {}
 ): PracticeEntry[] {
   switch (category) {
     case 'programmer':
-      return toEntries(programmerWords, options);
+      return toEntries(lang === 'en' ? programmerWordsEn : programmerWords, options);
     case 'beginner':
-      return toEntries(beginnerWords, options);
+      return toEntries(lang === 'en' ? beginnerWordsEn : beginnerWords, options);
     case 'plant':
     default:
       return getFlatPracticeList(options);
