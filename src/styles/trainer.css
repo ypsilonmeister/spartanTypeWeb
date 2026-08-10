@@ -408,3 +408,25 @@
     width: min(160px, 48vw);
   }
 }
+
+/* Short viewports (landscape tablets, low-res displays): the control panel
+   is already reordered above the word display/keyboard at <=1100px, but its
+   own padding/gaps still push the record button out of view without this. */
+@media (max-height: 700px) {
+  .trainer-layout {
+    gap: var(--space-sm);
+  }
+
+  .trainer-control-panel {
+    padding: var(--space-sm) var(--space-md);
+    gap: var(--space-sm);
+  }
+
+  .trainer-word-display {
+    padding: var(--space-sm) var(--space-md);
+  }
+
+  .trainer-recording-hint {
+    display: none;
+  }
+}

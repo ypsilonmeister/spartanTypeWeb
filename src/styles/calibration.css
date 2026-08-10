@@ -235,3 +235,36 @@
   overflow-x: auto;
   box-sizing: border-box;
 }
+
+@media (max-width: 480px) {
+  .calibration-card {
+    padding: 1rem;
+  }
+}
+
+@media (max-height: 700px) {
+  .calibration-screen {
+    gap: 1rem;
+  }
+
+  .calibration-main-row {
+    gap: 1rem;
+  }
+
+  .calibration-card {
+    min-height: auto;
+    padding: 1rem;
+  }
+
+  .calibration-step-title {
+    margin-bottom: 0.5rem;
+  }
+
+  .calibration-copy {
+    margin-bottom: 0.5rem;
+  }
+
+  .calibration-copy.is-muted {
+    margin-bottom: 0.75rem;
+  }
+}

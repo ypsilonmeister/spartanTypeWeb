@@ -154,7 +154,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           <div className="heatmap-section">
             <h3>Error Heatmap</h3>
             <p className="subtitle">Keys colored red indicate a higher frequency of incorrect finger usage.</p>
-            <KeyboardHeatmap layout={layout} keystrokes={sessionData.keystrokes} />
+            <div className="heatmap-scroll">
+              <KeyboardHeatmap layout={layout} keystrokes={sessionData.keystrokes} />
+            </div>
           </div>
         </div>
       )}

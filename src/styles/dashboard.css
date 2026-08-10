@@ -15,6 +15,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
   border-bottom: 1px solid #333;
   padding-bottom: 1rem;
 }
@@ -38,6 +40,7 @@
 
 .upload-section {
   display: flex;
+  flex-wrap: wrap;
   gap: 1rem;
 }
 
@@ -206,6 +209,16 @@
   flex-direction: column;
   align-items: center;
   gap: 1rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.heatmap-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  display: flex;
+  justify-content: center;
 }
 
 .heatmap-section .subtitle {
@@ -330,4 +343,32 @@
 
 .analysis-hidden-canvas {
   display: none;
+}
+
+@media (max-width: 640px) {
+  .dashboard-container {
+    gap: 1.5rem;
+  }
+
+  .dashboard-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .upload-section {
+    justify-content: stretch;
+  }
+
+  .upload-btn {
+    flex: 1;
+    text-align: center;
+  }
+
+  .dashboard-card {
+    padding: 1rem;
+  }
+
+  .score-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }

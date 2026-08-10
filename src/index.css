@@ -292,3 +292,28 @@ body {
     min-width: 0;
   }
 }
+
+/* Very narrow / low-resolution displays (small Android tablets, phones):
+   drop side padding entirely so content gets the full width to lay out in. */
+@media (max-width: 480px) {
+  .app-shell {
+    padding: var(--space-sm);
+  }
+
+  .app-content {
+    padding-bottom: var(--space-sm);
+  }
+}
+
+/* Short viewports (landscape tablets, low-res displays): trim vertical
+   chrome so primary action buttons land inside the fold without scrolling. */
+@media (max-height: 700px) {
+  .app-shell {
+    padding-top: var(--space-sm);
+    padding-bottom: var(--space-sm);
+  }
+
+  .app-navbar {
+    margin-bottom: var(--space-sm);
+  }
+}
