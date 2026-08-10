@@ -1,77 +1,119 @@
 # SpartanType Web
 
-ブラウザ完結型・インストール不要のスパルタ式運指矯正Webアプリケーション **SpartanType Web** です。
+*[日本語版はこちら / Japanese version here → README.ja.md](README.ja.md)*
 
-単に「正しいキーを押したか」だけでなく、Webカメラを通じた画像認識（MediaPipe）技術を用いて**「正しい指でキーを押したか」まで厳密に評価・矯正する**ことを目的としたトレーニング環境を提供します。
+**SpartanType Web** is a browser-only, install-free, Spartan-style typing form trainer.
 
----
+It doesn't just check whether you pressed the *right key* — using webcam-based hand tracking (MediaPipe), it strictly evaluates and corrects whether you pressed it **with the right finger**.
 
-## 🚀 主な機能要件
-
-### 1. スパルタ指使い判定 & 減点システム
-* カメラを通じてユーザーの手および指先の骨格（21個の3D関節）を追跡し、キーボードレイアウトごとに定義された「担当指」と、実際に打鍵した「動作指」を照合。
-* 担当外の指での打鍵（例: 中指で押すべきキーを人差し指で手を伸ばして押すなど）を検知すると、エラーとして判定・減点されます。
-
-### 2. 事後解析（非同期ビデオ判定）によるゼロ・レイテンシ設計
-* タイピング中の画像認識処理によるミリ秒単位のタイピングリズム阻害を防ぐため、セッション中は映像の録画と打鍵ログの記録（タイムスタンプ）に専念。
-* セッション終了後にバックグラウンド（Web Workers & WebCodecs API）で「ビデオ判定・フォーム解析」を非同期実行します。
-
-### 3. 射影変換（ホモグラフィ）によるキーボードマッピングキャリブレーション
-* ユーザーのカメラの傾きやキーボードの配置ズレを数学的に補正するため、射影変換（ホモグラフィ行列）を採用。
-* 初期に「四隅の特定のキー」を順番に打鍵するだけで、カメラ座標とキー配列の座標を自動で投影マッピングします。
-
-### 4. 振り返りダッシュボード & 癖の自動ラベリング
-* **エラーヒートマップ**: どのキーで誤った指使いが多く発生しているかを可視化。
-* **分類学アプローチによる癖のラベリング**: 「人差し指・過干渉型 (Index Overreach)」「小指・サボり型 (Pinky Avoidance)」など、ユーザー特有の悪癖パターンを客観的に特定・ラベリングします。
-
-### 5. 知的好奇心を刺激する植物分類ツリーのタイピングドリル
-* 植物分類学の系統構造（科 ➔ 属 ➔ 種）をローマ字でドリルダウン入力。
-* 正しい運指でタイピングを重ねるごとに、画面上の Canvas Bioluminescent Tree（サイバー植物ツリー）が美しく成長・枝分かれし、コンボ（連続正解）によって発光します。
+Everything runs client-side. There is no backend server: calibration, hand tracking, video analysis, and even the optional phone-as-overhead-camera pairing are all done directly in the browser.
 
 ---
 
-## 🛠️ 技術スタック
+## 🚀 Key Features
 
-* **開発基盤 / ビルダー**: Vite, package.json
-* **言語**: TypeScript
-* **UIフレームワーク**: React (状態管理と静的UI)
-* **スタイリング**: Vanilla CSS (CSSカスタムプロパティを用いた Glassmorphism & Cyber Dark デザイン)
-* **ハンドトラッキング**: MediaPipe Tasks Vision (Web)
-* **描画エンジン**: HTML5 Canvas (原生的な `requestAnimationFrame` ループによる高パフォーマンス描画)
+### 1. Spartan finger-accuracy grading
+Tracks the 21 3D hand/finger landmarks from your webcam and cross-references the finger that actually pressed a key against the finger *assigned* to that key by the active keyboard layout. Pressing a key with the wrong finger (e.g. reaching with your index finger for a key that belongs to your middle finger) is detected and penalized as an error.
 
----
+### 2. Zero-latency design via asynchronous post-session analysis
+No frame-by-frame hand-tracking inference runs while you're actually typing — that would introduce jitter into your typing rhythm. Instead, a session only records the video feed and keystroke timestamps in real time. Once the session ends, video decoding and finger-form analysis run asynchronously in the background (Web Workers + WebCodecs API).
 
-## 📦 クイックスタート
+### 3. Homography-based keyboard calibration
+A projective transformation (DLT / homography matrix) mathematically corrects for your camera's angle and the keyboard's physical placement. Calibration only requires pressing a handful of designated corner keys in sequence — camera-space coordinates are then automatically mapped onto keyboard-layout coordinates.
 
-### 動作要件
-* Node.js v18 以上
+### 4. Review dashboard with automatic habit labeling
+* **Error heatmap** — visualizes which keys most often get hit with the wrong finger.
+* **Taxonomy-style habit labeling** — objectively identifies and labels recurring bad habits, such as "Index Overreach" or "Pinky Avoidance."
 
-### 起動手順
+### 5. A typing drill disguised as a plant taxonomy tree
+Drill down through a botanical taxonomy (family ➔ genus ➔ species) by typing romanized Japanese names. Every correctly-fingered keystroke grows a bioluminescent Canvas tree on screen — it branches, blooms, and glows brighter the longer your correct-answer streak runs.
 
-1. 依存関係のインストール:
-   ```bash
-   npm install
-   ```
+### 6. Use your phone as an overhead camera — no app, no server
+Pair a phone as a second (overhead) camera feed via WebRTC, using a QR code to exchange connection info directly between the two browsers. There's no signaling server: the SDP offer/answer is compressed and exchanged by hand (QR scan or copy-paste), assuming both devices share the same Wi-Fi network.
 
-2. 開発サーバーの起動:
-   ```bash
-   npm run dev
-   ```
-
-3. ブラウザでアクセスします (例: `http://localhost:5173`)。
+### 7. English / Japanese UI, auto-detected
+The UI language is detected from your browser's language settings on first load (with a manual EN/JA toggle in the navbar for testing or personal preference, persisted in `localStorage`). Practice content adapts too: the beginner and programmer drills have English-equivalent word sets, while the plant-taxonomy drill stays Japanese since it's inherently kana vocabulary.
 
 ---
 
-## 🤖 AIエージェント開発用ガイド（CLAUDE.md / gemini.md / antigravity.md）
+## 🛠️ Tech Stack
 
-このリポジトリには、AIアシスタント（Claude Code や Gemini 等）がプロジェクトのルール、コマンド、およびコーディングスタイルを即座に把握し、開発を加速させるための定義ファイルが含まれています。
+* **Build tool**: Vite
+* **Language**: TypeScript (strict mode)
+* **UI framework**: React (state/UI only — no per-frame render loops)
+* **Styling**: Vanilla CSS with custom properties (glassmorphism + cyber-dark theme)
+* **Hand tracking**: MediaPipe Tasks Vision (Web)
+* **Rendering**: HTML5 Canvas via raw `requestAnimationFrame` loops (kept fully separate from React's render cycle for 60fps performance)
+* **PWA**: installable, offline-capable (vite-plugin-pwa)
+* **Tests**: Vitest
 
-* **[CLAUDE.md](CLAUDE.md) / [claude.md](claude.md)**: Claude Code 用のリファレンス。
-* **[gemini.md](gemini.md)**: Gemini 用のリファレンス。
-* **[antigravity.md](antigravity.md) / [ANTIGRAVITY.md](ANTIGRAVITY.md)**: Antigravity用のエージェント指示＆プランニング規約。
+---
 
-### 自動開発・テスト用カスタムスキル ( `.claude/` に格納)
-マニフェストファイル [plugin.json](.claude/plugin.json) に基づき、以下のコマンド（スキル）が拡張定義されています：
-* `/spartan-custom:e2e-verify` (E2Eテストスキル): `browser_subagent` を使い、ブラウザ上での遷移や動作を全自動検証。
-* `/spartan-custom:verify-homography` (数学エンジン検証): `scripts/verify_homography.cjs` を実行して DLT 幾何投影計算をチェック。
-* `/spartan-custom:generate-dictionary` (植物分類語彙ジェネレーター): リストから `plantDictionary.ts` データを自動生成。
+## 📦 Getting Started
+
+### Requirements
+* Node.js v18+
+* A Chromium-based browser (Chrome/Edge) is recommended — MediaPipe Tasks Vision and the WebCodecs API used for offline analysis have the most complete support there.
+* A webcam, and (for calibration/typing sessions) HTTPS or `localhost` — browsers only grant camera access in secure contexts.
+
+### Setup
+
+```bash
+npm install
+```
+
+### Commands
+
+| Command | Description |
+| --- | --- |
+| `npm run dev` | Start the local Vite dev server |
+| `npm run build` | Type-check (`tsc -b`) and build for production |
+| `npm run preview` | Preview the production build locally |
+| `npm run lint` | Lint with ESLint |
+| `npm test` | Run the Vitest test suite |
+
+Then open the URL Vite prints (typically `http://localhost:5173`).
+
+---
+
+## 🗂️ Project Structure
+
+```
+src/
+├── components/     # UI views, split by screen
+│   ├── trainer/       # Active typing sessions & webcam monitor
+│   ├── dashboard/     # Session metrics, heatmaps, diagnostics
+│   ├── calibration/   # Four-point homography calibration flow
+│   └── tree/          # Canvas-based plant-taxonomy visualizer
+├── hooks/          # React orchestration: session state, calibration
+│                   # capture, practice drills, recording, i18n
+├── domain/         # Pure TypeScript logic: hand geometry, finger
+│                   # analysis, practice-list selection, session
+│                   # serialization — no React or DOM access
+├── infra/          # Browser/MediaPipe integration: keyboard capture,
+│                   # worker protocol, offline video analysis
+├── i18n/           # Language context + translation dictionary
+├── types/          # Shared geometry, calibration, session, KLE,
+│                   # practice, and i18n interfaces
+└── utils/          # homography.ts (DLT projection math),
+                    # kleParser.ts, calibrationStorage.ts,
+                    # mediapipeUtils.ts, keyMap.ts, webrtcSignaling.ts
+```
+
+---
+
+## 🤖 AI Agent Developer Guides
+
+This repo ships reference files so AI coding assistants can pick up project conventions, commands, and architecture immediately:
+
+* **[CLAUDE.md](CLAUDE.md)** — for Claude Code.
+* **[AGENTS.md](AGENTS.md)** — for Codex-style agents.
+* **[gemini.md](gemini.md)** — for Gemini.
+* **[ANTIGRAVITY.md](ANTIGRAVITY.md)** — agent instructions & planning conventions for Antigravity.
+
+### Custom automation skills (`.claude/`)
+Defined in [plugin.json](.claude/plugin.json):
+
+* `/spartan-custom:e2e-verify` — end-to-end browser verification via a browser subagent.
+* `/spartan-custom:verify-homography` — runs `scripts/verify_homography.cjs` to check the DLT projection math.
+* `/spartan-custom:generate-dictionary` — generates `plantDictionary.ts` practice-word data from a list.
