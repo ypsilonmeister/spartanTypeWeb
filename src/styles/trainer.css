@@ -353,6 +353,12 @@
     flex-direction: column;
     flex-wrap: nowrap;
     align-items: stretch;
+    /* Base rule's justify-content: center controls cross-axis in row mode,
+       but becomes the vertical axis once stacked to a column. On short
+       viewports where the stacked content is taller than the container,
+       centering pushes the top of the content (the reordered control
+       panel) above y=0, where it's permanently unreachable by scrolling. */
+    justify-content: flex-start;
     gap: var(--space-lg);
     max-width: min(100%, 900px);
   }
