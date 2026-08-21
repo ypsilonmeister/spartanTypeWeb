@@ -12,7 +12,7 @@ import { useSessionRecorder } from '../../hooks/useSessionRecorder';
 import { useRealtimeFeedback } from '../../hooks/useRealtimeFeedback';
 import { PracticeWordDisplay } from './PracticeWordDisplay';
 import { TrainerControls } from './TrainerControls';
-import { PlantTreeCanvas } from '../tree/PlantTreeCanvas';
+import { GrowthTreeCanvas } from '../tree/GrowthTreeCanvas';
 import '../../styles/cameraPreview.css';
 import '../../styles/trainer.css';
 import type { CalibrationCameraSize, CalibrationHomography } from '../../types/calibration';
@@ -94,11 +94,10 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
     practiceCategory,
     practiceCategoryLabels,
     practiceList,
+    practiceTree,
     currentWordIndex,
     currentCharIndex,
-    correctCount,
-    incorrectCount,
-    lastPressedKey,
+    combo,
     flashError,
     handleSetPracticeCategory,
     handleKeyCode,
@@ -292,10 +291,9 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
           onToggleRecording={toggleRecording}
         />
 
-        <PlantTreeCanvas
-          correctCount={correctCount}
-          incorrectCount={incorrectCount}
-          lastPressedKey={lastPressedKey}
+        <GrowthTreeCanvas
+          tree={practiceTree}
+          combo={combo}
           width={276}
           height={300}
           caption="Live Typing Tree"
