@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { KeyboardLayout } from '../../types/kle';
 import type { SessionData, UnanalyzedSessionData } from '../../types/session';
+import { buildKeystrokeTreeView } from '../../domain/keystrokeTree';
 import { ScoreSummary } from './ScoreSummary';
 import { HabitAnalyzer } from './HabitAnalyzer';
 import { KeyboardHeatmap } from './KeyboardHeatmap';
-import { PlantTreeCanvas } from '../tree/PlantTreeCanvas';
+import { GrowthTreeCanvas } from '../tree/GrowthTreeCanvas';
 import { AnalysisPhase } from './AnalysisPhase';
 import { getVideoFileExtension } from '../../utils/mediaRecording';
 import '../../styles/dashboard.css';
@@ -30,6 +31,13 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const sessionData = initialAnalyzedData || null;
   const unanalyzedData = initialUnanalyzedData || null;
   const recordingBlob = initialRecordingBlob || initialUnanalyzedData?.blob || null;
+
+  // A recorded session carries no dictionary, so its tree is grown from the
+  // structure the log does have: hand ➔ finger ➔ key.
+  const fingerTree = useMemo(
+    () => (sessionData ? buildKeystrokeTreeView(sessionData.keystrokes, 'Fingers') : null),
+    [sessionData]
+  );
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -141,12 +149,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             
             {/* Right side: generated tree */}
             <div className="dashboard-tree-column">
-              <PlantTreeCanvas 
-                correctCount={sessionData.keystrokes.filter(k => k.isCorrectFinger).length}
-                incorrectCount={sessionData.keystrokes.filter(k => !k.isCorrectFinger).length}
-                lastPressedKey={sessionData.keystrokes.length > 0 ? sessionData.keystrokes[sessionData.keystrokes.length - 1].key : null}
+              <GrowthTreeCanvas
+                tree={fingerTree}
                 width={320}
                 height={380}
+                caption="Finger Accuracy Tree"
               />
             </div>
           </div>
