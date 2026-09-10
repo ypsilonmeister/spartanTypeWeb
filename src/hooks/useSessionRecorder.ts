@@ -3,7 +3,14 @@ import type { CalibrationCameraSize } from '../types/calibration';
 import { selectSupportedRecordingMimeType } from '../utils/mediaRecording';
 
 const RECORDING_MAX_WIDTH = 960;
-const RECORDING_FPS = 30;
+/**
+ * 録画フレームレート。解析時の wall 時間は「総フレーム数 ÷ 端末のデコード上限 (~85fps)」で
+ * 決まるため、ここが解析速度の主要な床になる。解析は打鍵ごとに 1 フレームしか使わず
+ * (domain/frameTargetSelector.ts)、150ms 以内なら判定が変わらないことを実測しているので、
+ * 15fps (粒度 67ms) で精度は落ちない。録画中のメインスレッド負荷も半分になる。
+ */
+const RECORDING_FPS = 15;
+const RECORDING_FRAME_INTERVAL_MS = 1000 / RECORDING_FPS;
 const RECORDING_VIDEO_BITS_PER_SECOND = 1_500_000;
 
 const getEvenSize = (value: number) => Math.max(2, Math.round(value / 2) * 2);
@@ -70,13 +77,21 @@ export function useSessionRecorder({
       throw new Error('Could not create recording canvas context.');
     }
 
-    const drawFrame = () => {
-      if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+    // rAF は表示リフレッシュ (60Hz 等) で回るが、描画は録画レートに間引く。
+    // captureStream(fps) はキャンバスが変化したときだけフレームを取るので、
+    // 描画しなければエンコードもされない = 録画中のタイピングを邪魔しない。
+    let lastDrawAt = -Infinity;
+    const drawFrame = (now: number) => {
+      if (
+        now - lastDrawAt >= RECORDING_FRAME_INTERVAL_MS
+        && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+      ) {
         ctx.drawImage(video, 0, 0, recordingSize.width, recordingSize.height);
+        lastDrawAt = now;
       }
       recordingAnimationFrameRef.current = requestAnimationFrame(drawFrame);
     };
-    drawFrame();
+    drawFrame(performance.now());
 
     const recordingStream = canvas.captureStream(RECORDING_FPS);
     recordingStreamRef.current = recordingStream;
