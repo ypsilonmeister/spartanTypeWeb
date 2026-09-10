@@ -12,11 +12,19 @@ export interface DetectRequest {
   requestId?: string;
 }
 
-export type WorkerRequest = InitRequest | DetectRequest;
+/**
+ * 推論オプションの切替。オフライン解析は「期待する手」だけを切り出して numHands: 1 で
+ * 推論し、終わったら realtime feedback 用に 2 へ戻す (ワーカーは両者で共有)。
+ */
+export interface SetOptionsRequest {
+  type: 'SET_OPTIONS';
+  numHands: number;
+}
+
+export type WorkerRequest = InitRequest | DetectRequest | SetOptionsRequest;
 
 /**
- * 計測用のワーカー側実測値。VITE_ANALYSIS_PROFILE が有効なときだけ付与される。
- * 無効時は常に undefined なので通常のペイロードは変わらない。
+ * 計測用のワーカー側実測値。isAnalysisProfilingEnabled のときに付与される。
  */
 export interface DetectProfile {
   /** landmarker.detectForVideo() 単体の所要時間 (ms)。 */
@@ -51,4 +59,16 @@ export interface DetectError {
   requestId?: string;
 }
 
-export type WorkerResponse = InitSuccess | InitError | DetectResult | DetectError;
+export interface SetOptionsResult {
+  type: 'SET_OPTIONS_RESULT';
+  numHands: number;
+  ok: boolean;
+  error?: string;
+}
+
+export type WorkerResponse =
+  | InitSuccess
+  | InitError
+  | DetectResult
+  | DetectError
+  | SetOptionsResult;

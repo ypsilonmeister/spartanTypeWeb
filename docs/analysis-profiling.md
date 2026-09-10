@@ -90,8 +90,19 @@ Worker 側にも `[AnalysisProfile] HandLandmarker delegate: ...` が単独で�
 | `targets.abandoned` | 500ms 以上過ぎてしまい諦めた目標数 (seek 等の異常時) |
 | `targets.unreached` | 動画が終わるまで到達しなかった目標数 (動画より後の打鍵) |
 
+| `frames.cropped` | 期待する手の側だけを切り出して推論したフレーム数 |
+| `frames.fullFrame` | 全体を両手で推論したフレーム数 (期待する手が不明・両手にまたがる・切り出し無効) |
+| `inference.fallbackToOtherHand` | 期待する手がキーに届いておらず、もう片方の手も推論したフレーム数 |
+| `inference.fallbackUnavailable` | 上のフォールバックが必要だったが、もう片方の切り出しが間に合わなかった回数 |
+| `targets.missedExpectedHand` | フォールバック無効時に、期待する手がキーに届いていなかった打鍵数 |
+
 解析は「打鍵ごとに keydown 以降の最初のフレーム」だけを推論する
 (`domain/frameTargetSelector.ts`、F は `offlineAnalyzer.ts` の `FRAME_TARGET_OPTIONS`)。
+さらに打鍵から期待する手が分かるときは、その手が写っている側だけを切り出して
+`numHands: 1` で推論する (`domain/frameCrop.ts`、設定は `offlineAnalyzer.ts` の
+`EXPECTED_HAND_CROP`)。期待する手のどの指もキーから 1.5U 以上離れていれば
+(逆の手で打った等)、もう片方の側も推論して両手ぶん合成するので、
+「手が違う」判定は残る。
 目標フレームが来たのにキューが埋まっていればフレームを捨てず video を止めて待つので、
 `frames.waitedForSlot` と `wait.pausedMs` が「推論が再生に追いつかなかった量」を表す。
 
