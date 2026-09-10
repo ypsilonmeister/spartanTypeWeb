@@ -34,6 +34,10 @@ export default defineConfig(({ mode }) => {
       react(),
       VitePWA({
         registerType: 'autoUpdate',
+        // 計測ビルドでは Service Worker を「自己破壊型」にする: 起動時に自分を unregister して
+        // precache を消す。再ビルド/再デプロイ後も古い版が配信され続ける事故を防ぐ。
+        // 通常ビルドでは false なので本番の PWA 挙動は変わらない。
+        selfDestroying: isProbeBuild(mode),
         includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
         workbox: {
           // MediaPipe のモデル(~10MB)と WASM は CDN から取得するため、

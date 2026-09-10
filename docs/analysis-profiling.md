@@ -31,10 +31,14 @@ npm run preview -- --host
 どのシェル (PowerShell / bash / cmd) でも同じコマンドで動く。
 タブレットのコンソールは PC の Chrome から `chrome://inspect` でリモートデバッグして読む。
 
-### PWA キャッシュに注意
+### PWA キャッシュについて
 
-このアプリは Service Worker で precache するため、再ビルドしても端末が古い版を
-表示し続けることがある。計測前に DevTools の Application → Service Workers で
+通常ビルドは Service Worker で precache するため、以前は再ビルド後も端末が古い版を
+表示し続けることがあった。**profile ビルドでは SW を自己破壊型にしてある**
+(`vite.config.ts` の `selfDestroying`) ので、新しい profile ビルドを一度読み込めば
+古い SW と precache は自動で消える (読み込み直後に 1 回自動リロードが入る)。
+
+それでも古い版が出る場合は、DevTools の Application → Service Workers で
 Unregister するか、DevTools の Console で次を実行する:
 
 ```js
