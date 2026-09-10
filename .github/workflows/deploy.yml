@@ -4,6 +4,17 @@ on:
   push:
     branches: [main, master]
   workflow_dispatch:
+    inputs:
+      build_mode:
+        description: >-
+          production = 通常の本番ビルド /
+          profile = 計測 + デバイスプローブ (probe.html) 入りビルド
+        required: true
+        default: production
+        type: choice
+        options:
+          - production
+          - profile
 
 permissions:
   contents: read
@@ -24,10 +35,22 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+
+      # push トリガー時 inputs.build_mode は空になるため、既定は常に通常ビルド。
+      # profile ビルドは Actions から手動で選んだときだけ走る
+      # (probe.html と解析計測が含まれる。docs/analysis-profiling.md 参照)。
       - name: Build
-        run: npm run build
+        run: |
+          if [ "${{ inputs.build_mode }}" = "profile" ]; then
+            echo "::notice::Building in PROFILE mode (includes probe.html and analysis profiling)"
+            npm run build:profile
+          else
+            echo "::notice::Building in PRODUCTION mode"
+            npm run build
+          fi
         env:
           GITHUB_PAGES_BASE: /${{ github.event.repository.name }}/
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

@@ -3,9 +3,11 @@ import {
   createHandLandmarkerOptions,
   MEDIAPIPE_WASM_URL,
 } from '../infra/handLandmarkerConfig';
-import type { WorkerRequest, WorkerResponse } from '../infra/workerProtocol';
+import type { DetectProfile, WorkerRequest, WorkerResponse } from '../infra/workerProtocol';
+import { isAnalysisProfilingEnabled } from '../infra/analysisProfiler';
 
 let landmarker: HandLandmarker | null = null;
+let activeDelegate: 'GPU' | 'CPU' = 'GPU';
 let isInitializing = false;
 let timestampOffset = 0;
 let lastDetectTimestamp = -Infinity;
@@ -37,6 +39,7 @@ async function initLandmarker() {
         vision,
         createHandLandmarkerOptions('GPU')
       );
+      activeDelegate = 'GPU';
     } catch (gpuErr) {
       console.warn(
         'Worker GPU delegate init failed, falling back to CPU:',
@@ -46,6 +49,11 @@ async function initLandmarker() {
         vision,
         createHandLandmarkerOptions('CPU')
       );
+      activeDelegate = 'CPU';
+    }
+
+    if (isAnalysisProfilingEnabled) {
+      console.log(`[AnalysisProfile] HandLandmarker delegate: ${activeDelegate}`);
     }
 
     self.postMessage({ type: 'INIT_SUCCESS' } satisfies WorkerResponse);
@@ -67,7 +75,11 @@ self.onmessage = (e: MessageEvent<WorkerRequest>) => {
   } else if (request.type === 'DETECT' && landmarker && request.image) {
     try {
       const detectTimestamp = getMonotonicDetectTimestamp(request.timestamp);
+      const detectStart = isAnalysisProfilingEnabled ? performance.now() : 0;
       const results = landmarker.detectForVideo(request.image, detectTimestamp);
+      const profile: DetectProfile | undefined = isAnalysisProfilingEnabled
+        ? { detectMs: performance.now() - detectStart, delegate: activeDelegate }
+        : undefined;
 
       // Post results back to main thread.
       // keystrokeIndex はリアルタイム解析で送られてきた場合のみ存在し、
@@ -77,7 +89,8 @@ self.onmessage = (e: MessageEvent<WorkerRequest>) => {
         results,
         timestamp: request.timestamp,
         keystrokeIndex: request.keystrokeIndex,
-        requestId: request.requestId
+        requestId: request.requestId,
+        profile
       } satisfies WorkerResponse);
     } catch (err) {
       console.error('Worker detection error:', err);

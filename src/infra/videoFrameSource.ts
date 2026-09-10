@@ -1,3 +1,5 @@
+import { noopAnalysisProfiler, type AnalysisProfiler } from './analysisProfiler';
+
 type VideoWithCallback = HTMLVideoElement & {
   requestVideoFrameCallback: (callback: () => void) => number;
 };
@@ -14,6 +16,8 @@ interface VideoFrameSourceOptions {
   onLoaded: (width: number, height: number, duration: number) => void;
   onEnded: () => void;
   onError: (error: unknown) => void;
+  /** 計測用。VITE_ANALYSIS_PROFILE が無効なときは no-op が渡る。 */
+  profiler?: AnalysisProfiler;
 }
 
 export interface VideoFrameSource {
@@ -47,11 +51,15 @@ export function createVideoFrameSource(options: VideoFrameSourceOptions): VideoF
     onLoaded,
     onEnded,
     onError,
+    profiler = noopAnalysisProfiler,
   } = options;
 
   let cancelled = false;
   let ended = false;
   let lastProcessedTime = -1;
+  // 計測専用。lastProcessedTime と違い「キャプチャできたか」に関係なく
+  // 新しく提示されたフレームを 1 回だけ数えるために使う。
+  let lastSeenTime = -1;
   const url = URL.createObjectURL(blob);
 
   const getDuration = () => (
@@ -84,25 +92,47 @@ export function createVideoFrameSource(options: VideoFrameSourceOptions): VideoF
       return;
     }
 
-    if (video.currentTime !== lastProcessedTime && shouldCaptureFrame()) {
-      lastProcessedTime = video.currentTime;
+    profiler.count('frames.callbackTicks');
 
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        onError(new Error('Could not create analysis canvas context.'));
-        return;
+    const isNewlyPresentedFrame = video.currentTime !== lastSeenTime;
+    if (isNewlyPresentedFrame) {
+      lastSeenTime = video.currentTime;
+      profiler.count('frames.presented');
+    }
+
+    if (video.currentTime !== lastProcessedTime) {
+      if (shouldCaptureFrame()) {
+        lastProcessedTime = video.currentTime;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          onError(new Error('Could not create analysis canvas context.'));
+          return;
+        }
+
+        profiler.count('frames.captured');
+        profiler.measure('decode.drawImage', () => {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        });
+
+        const endBitmapSpan = profiler.span('decode.createImageBitmap');
+        createImageBitmap(canvas)
+          .then((bitmap) => {
+            endBitmapSpan();
+            if (cancelled || ended) {
+              bitmap.close();
+              return;
+            }
+            onFrame(bitmap, video.currentTime * 1000);
+          })
+          .catch((error) => {
+            endBitmapSpan();
+            onError(error);
+          });
+      } else if (isNewlyPresentedFrame) {
+        // 推論キューが詰まっているために捨てられたフレーム (既存の間引き)。
+        profiler.count('frames.skippedByBackpressure');
       }
-
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      createImageBitmap(canvas)
-        .then((bitmap) => {
-          if (cancelled || ended) {
-            bitmap.close();
-            return;
-          }
-          onFrame(bitmap, video.currentTime * 1000);
-        })
-        .catch(onError);
     }
 
     reportProgress();

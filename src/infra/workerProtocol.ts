@@ -14,6 +14,17 @@ export interface DetectRequest {
 
 export type WorkerRequest = InitRequest | DetectRequest;
 
+/**
+ * 計測用のワーカー側実測値。VITE_ANALYSIS_PROFILE が有効なときだけ付与される。
+ * 無効時は常に undefined なので通常のペイロードは変わらない。
+ */
+export interface DetectProfile {
+  /** landmarker.detectForVideo() 単体の所要時間 (ms)。 */
+  detectMs: number;
+  /** 実際に初期化できた MediaPipe デリゲート。 */
+  delegate: 'GPU' | 'CPU';
+}
+
 export interface InitSuccess {
   type: 'INIT_SUCCESS';
 }
@@ -29,6 +40,7 @@ export interface DetectResult {
   timestamp: number;
   keystrokeIndex?: number;
   requestId?: string;
+  profile?: DetectProfile;
 }
 
 export interface DetectError {

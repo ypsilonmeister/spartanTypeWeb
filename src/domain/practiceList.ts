@@ -25,9 +25,14 @@ export function getFlatPracticeList(
   plantDictionary.forEach(group => {
     group.genuses.forEach(g => {
       g.species.forEach(s => {
+        // All three drills sit at the same spot in the taxonomy; only the
+        // amount of text you type differs, so they share one leaf.
+        const segments = [group.family.japanese, g.genus.japanese, s.japanese];
+
         list.push({
           node: { ...s },
-          path: s.japanese
+          path: s.japanese,
+          segments
         });
 
         list.push({
@@ -36,7 +41,8 @@ export function getFlatPracticeList(
             japanese: `${g.genus.japanese}${s.japanese}`,
             romaji: `${g.genus.romaji}${s.romaji}`
           },
-          path: `${g.genus.japanese} ➔ ${s.japanese}`
+          path: `${g.genus.japanese} ➔ ${s.japanese}`,
+          segments
         });
 
         list.push({
@@ -45,7 +51,8 @@ export function getFlatPracticeList(
             japanese: `${group.family.japanese}${g.genus.japanese}${s.japanese}`,
             romaji: `${group.family.romaji}${g.genus.romaji}${s.romaji}`
           },
-          path: `${group.family.japanese} ➔ ${g.genus.japanese} ➔ ${s.japanese}`
+          path: `${group.family.japanese} ➔ ${g.genus.japanese} ➔ ${s.japanese}`,
+          segments
         });
       });
     });
@@ -57,7 +64,10 @@ export function getFlatPracticeList(
 function toEntries(words: FlatWord[], options: { shuffle?: boolean }): PracticeEntry[] {
   const list: PracticeEntry[] = words.map(w => ({
     node: { level: 'species', japanese: w.japanese, romaji: w.romaji },
-    path: w.path
+    path: w.path,
+    // Flat dictionaries carry a single grouping label, so the tree is
+    // category ➔ word rather than the plant list's family ➔ genus ➔ species.
+    segments: [w.path, w.japanese]
   }));
 
   return shuffleEntries(list, options.shuffle);

@@ -51,7 +51,7 @@ To achieve sub-millisecond typing latencies and a butter-smooth 60fps webcam fra
   * `trainer/`: Active typing sessions and webcam monitors.
   * `dashboard/`: Session metrics, heatmaps, and diagnostic labels.
   * `calibration/`: Four-point homography projection setups.
-  * `tree/`: Canvas-based neon plant classification visualizer.
+  * `tree/`: Canvas-based neon growth tree. Renders whatever classification it is handed (practice dictionary, or hand ➔ finger ➔ key for a recorded session).
 * `src/hooks/`: React orchestration for app session state, calibration capture, practice drills, recording, and worker-backed feedback.
 * `src/domain/`: Pure TypeScript logic for hand geometry, finger analysis, practice-list selection, and typing-session serialization. No React or DOM access.
 * `src/infra/`: Browser and MediaPipe integration: keyboard capture, worker protocol/config, offline video analysis, and frame extraction.
