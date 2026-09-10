@@ -25,10 +25,15 @@ describe('TypingSession.mapHandsToTips', () => {
 
     const { mappedTips, uiPointers } = session.mapHandsToTips([handAt(0.1, 0.5)], 1000, 500, false);
 
-    // 単一の手は画面左半分にあるので Left。identity なので画素座標がそのまま出る。
-    expect(mappedTips.LeftIndex).toEqual({ x: 120, y: 250 });
-    expect(mappedTips.LeftPinky).toEqual({ x: 150, y: 250 });
-    expect(uiPointers).toEqual([{ x: 120, y: 250 }]);
+    // 単一の手は画面左半分にあるので Left。identity なので画素座標がそのまま出る
+    // (0.1 + 0.02 は 2 進では 0.12000000000000001 なので近似比較)。
+    expect(mappedTips.LeftIndex.x).toBeCloseTo(120, 6);
+    expect(mappedTips.LeftIndex.y).toBeCloseTo(250, 6);
+    expect(mappedTips.LeftPinky.x).toBeCloseTo(150, 6);
+    expect(mappedTips.LeftPinky.y).toBeCloseTo(250, 6);
+    expect(uiPointers).toHaveLength(1);
+    expect(uiPointers[0].x).toBeCloseTo(120, 6);
+    expect(uiPointers[0].y).toBeCloseTo(250, 6);
     expect(session.getFrames()).toHaveLength(0);
   });
 
