@@ -1,0 +1,219 @@
+/* ============================================================
+   Device Probe (dev 専用ページ)
+   実機のコンソールを開かずに読めることを優先した簡素なレイアウト。
+   ============================================================ */
+
+/* index.css はトレーナー用に html/body/#root を height:100% + overflow:hidden +
+   flex で固定している。プローブページは縦に長い「ドキュメント」なので、
+   このページ (probe.html 専用エントリ) でだけ解除してスクロールできるようにする。
+   deviceProbe.css は probe.html からしか読まれないため本番アプリには影響しない。 */
+html,
+body,
+#root {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}
+
+#root {
+  display: block;
+}
+
+.probe-page {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: var(--space-md);
+  padding-bottom: var(--space-2xl);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+}
+
+.probe-header {
+  margin-bottom: var(--space-lg);
+}
+
+.probe-header h1 {
+  margin: 0 0 var(--space-xs);
+  font-size: 1.5rem;
+  color: var(--color-accent);
+  text-shadow: 0 0 12px var(--color-accent-glow);
+}
+
+.probe-status {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.probe-error {
+  margin: var(--space-sm) 0 0;
+  padding: var(--space-sm);
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius-sm);
+  color: var(--color-error);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  word-break: break-word;
+}
+
+.probe-card {
+  box-sizing: border-box;
+  margin-bottom: var(--space-lg);
+  padding: var(--space-md);
+  /* 列の多い表 (MediaPipe 実測) が狭い画面でも読めるよう、カード内で横スクロールさせる。
+     ページ本体は横スクロールさせない。 */
+  overflow-x: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+
+.probe-card h2 {
+  margin: 0 0 var(--space-md);
+  font-size: 1rem;
+  color: var(--color-accent);
+}
+
+.probe-highlights {
+  display: grid;
+  gap: var(--space-sm);
+  margin: 0;
+}
+
+.probe-highlights > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-sm);
+  background: var(--color-surface-2);
+  border-radius: var(--radius-sm);
+}
+
+.probe-highlights dt {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.probe-highlights dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  word-break: break-word;
+}
+
+.probe-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  font-family: var(--font-mono);
+}
+
+.probe-table th,
+.probe-table td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: top;
+}
+
+.probe-table thead th {
+  color: var(--color-text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.probe-table tbody th {
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+.probe-wrap {
+  word-break: break-all;
+}
+
+.probe-note {
+  margin: var(--space-sm) 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.probe-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.probe-button {
+  padding: 10px 16px;
+  margin-bottom: var(--space-sm);
+  background: var(--color-surface-2);
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent-dark);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.probe-button:hover:not(:disabled) {
+  background: var(--color-accent-dark);
+  color: var(--color-text);
+  box-shadow: var(--shadow-accent);
+}
+
+.probe-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.probe-verdict {
+  margin: var(--space-sm) 0;
+  padding: var(--space-sm);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+/* カメラ未使用時は空の黒枠になるだけなので隠す。ref は保持したいので DOM には残す。 */
+.probe-video.is-hidden {
+  display: none;
+}
+
+.probe-video {
+  width: 100%;
+  max-width: 320px;
+  margin: var(--space-sm) 0;
+  border: 1px solid var(--color-border-2);
+  border-radius: var(--radius-sm);
+  transform: scaleX(-1);
+}
+
+/* 計測用の中間キャンバス。表示する必要はない。 */
+.probe-canvas {
+  display: none;
+}
+
+.probe-json {
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: var(--space-sm);
+  padding: var(--space-sm);
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  resize: vertical;
+}
+
+.tone-ok { color: var(--color-success); }
+.tone-bad { color: var(--color-error); }
+.tone-warn { color: var(--color-warning); }
+.tone-dim { color: var(--color-text-dim); }
