@@ -1,13 +1,29 @@
 import { TypingSession } from '../domain/typingSession';
+import {
+  createFrameTargetSelector,
+  DEFAULT_FRAME_TARGET_OPTIONS,
+  type FrameTargetSelectorOptions,
+} from '../domain/frameTargetSelector';
 import type { KeyboardLayout } from '../types/kle';
 import type { SessionData, UnanalyzedSessionData } from '../types/session';
 import { mapMediaPipeResults } from '../utils/mediapipeUtils';
 import type { DetectRequest, WorkerResponse } from './workerProtocol';
-import { createVideoFrameSource, type VideoFrameSource } from './videoFrameSource';
+import {
+  createVideoFrameSource,
+  type FrameDecision,
+  type VideoFrameSource,
+} from './videoFrameSource';
 import { createAnalysisProfiler } from './analysisProfiler';
 
 const ANALYSIS_PLAYBACK_RATE = 3;
 const MAX_PENDING_FRAMES = 2;
+/**
+ * 打鍵あたりの推論フレーム。既定は keydown 以降の最初の 1 枚 (F=1)。
+ * 実測: 推論は端末によらず入力解像度に依存せず、Blackview Tab 7 Pro (Mali-G57) で
+ * 150ms/frame。wall ≈ max(duration / 3, 打鍵数 × F × 0.15s) になるので、
+ * F を増やすのは精度データを見てから。
+ */
+const FRAME_TARGET_OPTIONS: FrameTargetSelectorOptions = DEFAULT_FRAME_TARGET_OPTIONS;
 const FINALIZE_MAX_RETRIES = 100;
 const FINALIZE_RETRY_DELAY_MS = 100;
 
@@ -49,6 +65,13 @@ export function runOfflineAnalysis(options: OfflineAnalysisOptions): OfflineAnal
     layout,
     unanalyzedData.homography,
     unanalyzedData.calibrationCameraSize
+  );
+
+  // 打鍵時刻 (セッション開始からの ms) と動画時刻 (先頭からの ms) は同じ原点を
+  // 共有している前提 (TrainerScreen の sessionStartRef と録画開始)。
+  const frameTargets = createFrameTargetSelector(
+    unanalyzedData.keystrokes.map((k) => k.timestamp),
+    FRAME_TARGET_OPTIONS
   );
 
   if (!unanalyzedData.blob) {
@@ -97,8 +120,20 @@ export function runOfflineAnalysis(options: OfflineAnalysisOptions): OfflineAnal
     isFinalized = true;
     cleanup();
 
+    const targetStats = frameTargets.finish();
+    profiler.count('targets.total', targetStats.total);
+    profiler.count('targets.captured', targetStats.captured);
+    profiler.count('targets.late', targetStats.late);
+    profiler.count('targets.abandoned', targetStats.abandoned);
+    profiler.count('targets.unreached', targetStats.unreached);
+
     onProgress({ status: 'Finalizing session data...' });
-    console.log(`[Analysis] Frame processing complete. Total analyzed frames: ${frameCounter}. Exporting session JSON...`);
+    console.log(
+      `[Analysis] Frame processing complete. Analyzed frames: ${frameCounter}. ` +
+      `Keystroke targets: ${targetStats.captured}/${targetStats.total} captured, ` +
+      `${targetStats.late} late, ${targetStats.abandoned} abandoned, ${targetStats.unreached} unreached. ` +
+      'Exporting session JSON...'
+    );
     session.loadKeystrokes(unanalyzedData.keystrokes);
 
     if (!cancelled) {
@@ -126,9 +161,15 @@ export function runOfflineAnalysis(options: OfflineAnalysisOptions): OfflineAnal
     profiler.add('transfer.queueAndCopy', Math.max(0, roundTripMs - detectMs));
   };
 
+  // 推論キューが空いた。'wait' で止めていれば再生を再開する。
+  const releaseSlot = () => {
+    pendingFrames--;
+    frameSource?.resume();
+  };
+
   const handleWorkerMessage = (event: MessageEvent<WorkerResponse>) => {
     if (event.data.type === 'DETECT_RESULT') {
-      pendingFrames--;
+      releaseSlot();
       const { results, timestamp, profile } = event.data;
 
       frameCounter++;
@@ -156,7 +197,7 @@ export function runOfflineAnalysis(options: OfflineAnalysisOptions): OfflineAnal
         );
       });
     } else if (event.data.type === 'DETECT_ERROR') {
-      pendingFrames--;
+      releaseSlot();
       profiler.count('frames.workerErrors');
       if (typeof event.data.timestamp === 'number') {
         frameSentAt.delete(event.data.timestamp);
@@ -175,7 +216,14 @@ export function runOfflineAnalysis(options: OfflineAnalysisOptions): OfflineAnal
     expectedDurationSeconds: unanalyzedData.recordingDurationMs
       ? unanalyzedData.recordingDurationMs / 1000
       : undefined,
-    shouldCaptureFrame: () => pendingFrames < MAX_PENDING_FRAMES,
+    decideFrame: (timestampMs): FrameDecision => {
+      if (!frameTargets.wants(timestampMs)) return 'skip';
+      if (pendingFrames >= MAX_PENDING_FRAMES) return 'wait';
+      // capture を返した時点で確定させる。onFrame (createImageBitmap 後) まで待つと、
+      // その間に次のフレームが来て同じ目標を二重に取ってしまう。
+      frameTargets.markCaptured(timestampMs);
+      return 'capture';
+    },
     onFrame: (image, timestamp) => {
       pendingFrames++;
       const request: DetectRequest = { type: 'DETECT', image, timestamp };
@@ -213,6 +261,8 @@ export function runOfflineAnalysis(options: OfflineAnalysisOptions): OfflineAnal
   profiler.note('session.keystrokes', unanalyzedData.keystrokes.length);
   profiler.note('analysis.playbackRate', ANALYSIS_PLAYBACK_RATE);
   profiler.note('analysis.maxPendingFrames', MAX_PENDING_FRAMES);
+  profiler.note('analysis.frameTargetOffsetsMs', FRAME_TARGET_OPTIONS.offsetsMs.join(','));
+  profiler.note('analysis.frameTargets', frameTargets.targetCount());
   profiler.note(
     'video.frameCallback',
     'requestVideoFrameCallback' in video ? 'requestVideoFrameCallback' : 'requestAnimationFrame'

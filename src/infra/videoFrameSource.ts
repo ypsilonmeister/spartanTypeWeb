@@ -4,13 +4,23 @@ type VideoWithCallback = HTMLVideoElement & {
   requestVideoFrameCallback: (callback: () => void) => number;
 };
 
+/**
+ * 提示されたフレームをどう扱うか。
+ * - capture: この場で canvas へ描いて ImageBitmap 化し onFrame へ渡す
+ * - skip:    何もしない (推論対象ではない)
+ * - wait:    推論したいがキューが埋まっている。フレームを捨てずに再生を止め、
+ *            resume() が呼ばれたら同じフレームを評価し直す
+ */
+export type FrameDecision = 'capture' | 'skip' | 'wait';
+
 interface VideoFrameSourceOptions {
   blob: Blob;
   video: HTMLVideoElement;
   canvas: HTMLCanvasElement;
   playbackRate: number;
   expectedDurationSeconds?: number;
-  shouldCaptureFrame: () => boolean;
+  /** 提示フレームの動画時刻 (ms) を受け取り、扱いを返す。 */
+  decideFrame: (timestampMs: number) => FrameDecision;
   onFrame: (bitmap: ImageBitmap, timestamp: number) => void;
   onProgress: (progress: number) => void;
   onLoaded: (width: number, height: number, duration: number) => void;
@@ -23,6 +33,8 @@ interface VideoFrameSourceOptions {
 export interface VideoFrameSource {
   start: () => void;
   cancel: () => void;
+  /** 'wait' で止めた再生を再開する。止まっていなければ何もしない。 */
+  resume: () => void;
 }
 
 export function calculatePlaybackProgress(
@@ -45,7 +57,7 @@ export function createVideoFrameSource(options: VideoFrameSourceOptions): VideoF
     canvas,
     playbackRate,
     expectedDurationSeconds,
-    shouldCaptureFrame,
+    decideFrame,
     onFrame,
     onProgress,
     onLoaded,
@@ -56,6 +68,10 @@ export function createVideoFrameSource(options: VideoFrameSourceOptions): VideoF
 
   let cancelled = false;
   let ended = false;
+  // 'wait' で自分から止めている間 true。video.paused だけでは「解析が終わった」
+  // 扱いになってしまうので、意図した一時停止と区別する。
+  let pausedForBackpressure = false;
+  let pauseStartedAt = 0;
   let lastProcessedTime = -1;
   // 計測専用。lastProcessedTime と違い「キャプチャできたか」に関係なく
   // 新しく提示されたフレームを 1 回だけ数えるために使う。
@@ -84,9 +100,70 @@ export function createVideoFrameSource(options: VideoFrameSourceOptions): VideoF
     }
   };
 
+  const captureCurrentFrame = () => {
+    lastProcessedTime = video.currentTime;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      onError(new Error('Could not create analysis canvas context.'));
+      return;
+    }
+
+    profiler.count('frames.captured');
+    profiler.measure('decode.drawImage', () => {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    });
+
+    const endBitmapSpan = profiler.span('decode.createImageBitmap');
+    createImageBitmap(canvas)
+      .then((bitmap) => {
+        endBitmapSpan();
+        if (cancelled || ended) {
+          bitmap.close();
+          return;
+        }
+        onFrame(bitmap, video.currentTime * 1000);
+      })
+      .catch((error) => {
+        endBitmapSpan();
+        onError(error);
+      });
+  };
+
+  /**
+   * 今 video に出ているフレームを 1 回評価する。
+   * 戻り値 false = 'wait' で再生を止めたので、フレームループを継続しない。
+   */
+  const evaluateCurrentFrame = (): boolean => {
+    const isNewlyPresentedFrame = video.currentTime !== lastSeenTime;
+    if (isNewlyPresentedFrame) {
+      lastSeenTime = video.currentTime;
+      profiler.count('frames.presented');
+    }
+
+    if (video.currentTime === lastProcessedTime) return true;
+
+    const decision = decideFrame(video.currentTime * 1000);
+    if (decision === 'capture') {
+      captureCurrentFrame();
+    } else if (decision === 'wait') {
+      // 目標フレームなのに推論キューが埋まっている。捨てずに止めて待つ。
+      // 再生を止めれば新しいフレームは提示されないので、ループもここで途切れる。
+      pausedForBackpressure = true;
+      pauseStartedAt = performance.now();
+      profiler.count('frames.waitedForSlot');
+      video.pause();
+      reportProgress();
+      return false;
+    } else if (isNewlyPresentedFrame) {
+      profiler.count('frames.skipped');
+    }
+    return true;
+  };
+
   const processVideoFrame = () => {
     if (cancelled || ended) return;
-    if (video.paused || video.ended) {
+    if (video.ended || (video.paused && !pausedForBackpressure)) {
       ended = true;
       onEnded();
       return;
@@ -94,49 +171,25 @@ export function createVideoFrameSource(options: VideoFrameSourceOptions): VideoF
 
     profiler.count('frames.callbackTicks');
 
-    const isNewlyPresentedFrame = video.currentTime !== lastSeenTime;
-    if (isNewlyPresentedFrame) {
-      lastSeenTime = video.currentTime;
-      profiler.count('frames.presented');
-    }
-
-    if (video.currentTime !== lastProcessedTime) {
-      if (shouldCaptureFrame()) {
-        lastProcessedTime = video.currentTime;
-
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          onError(new Error('Could not create analysis canvas context.'));
-          return;
-        }
-
-        profiler.count('frames.captured');
-        profiler.measure('decode.drawImage', () => {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        });
-
-        const endBitmapSpan = profiler.span('decode.createImageBitmap');
-        createImageBitmap(canvas)
-          .then((bitmap) => {
-            endBitmapSpan();
-            if (cancelled || ended) {
-              bitmap.close();
-              return;
-            }
-            onFrame(bitmap, video.currentTime * 1000);
-          })
-          .catch((error) => {
-            endBitmapSpan();
-            onError(error);
-          });
-      } else if (isNewlyPresentedFrame) {
-        // 推論キューが詰まっているために捨てられたフレーム (既存の間引き)。
-        profiler.count('frames.skippedByBackpressure');
-      }
-    }
+    if (!evaluateCurrentFrame()) return;
 
     reportProgress();
     requestNextFrame(processVideoFrame);
+  };
+
+  const resume = () => {
+    if (!pausedForBackpressure || cancelled || ended) return;
+    profiler.add('wait.pausedMs', performance.now() - pauseStartedAt);
+
+    // 止めていたフレームをまず評価し直す (キューが空いたので capture になるはず)。
+    // まだ埋まっていれば再び 'wait' になり、pausedForBackpressure は立ったまま。
+    pausedForBackpressure = false;
+    const shouldContinue = evaluateCurrentFrame();
+    if (!shouldContinue) return;
+
+    video.play()
+      .then(() => requestNextFrame(processVideoFrame))
+      .catch(onError);
   };
 
   const handleLoadedData = () => {
@@ -171,8 +224,10 @@ export function createVideoFrameSource(options: VideoFrameSourceOptions): VideoF
       video.addEventListener('error', handleError);
       video.src = url;
     },
+    resume,
     cancel: () => {
       cancelled = true;
+      pausedForBackpressure = false;
       video.removeEventListener('loadeddata', handleLoadedData);
       video.removeEventListener('ended', handleEnded);
       video.removeEventListener('error', handleError);
