@@ -10,7 +10,8 @@ import { detectWasmSimd, detectWasmThreads } from './deviceProbeProtocol';
 // useSessionRecorder.ts の RECORDING_MAX_WIDTH / RECORDING_FPS と一致させること。
 // ここがズレると「実際に録画される条件」を測れなくなる。
 const RECORDING_MAX_WIDTH = 960;
-const RECORDING_FPS = 30;
+const RECORDING_FPS = 15;
+const RECORDING_FRAME_INTERVAL_MS = 1000 / RECORDING_FPS;
 
 const getEvenSize = (value: number) => Math.max(2, Math.round(value / 2) * 2);
 
@@ -309,13 +310,18 @@ export function recordSample(
       return;
     }
 
+    // アプリと同じく、描画を録画レートに間引く。
     let rafId = 0;
     let tick = 0;
-    const drawFrame = () => {
-      drawSourceFrame(ctx, source, width, height, tick++);
+    let lastDrawAt = -Infinity;
+    const drawFrame = (now: number) => {
+      if (now - lastDrawAt >= RECORDING_FRAME_INTERVAL_MS) {
+        drawSourceFrame(ctx, source, width, height, tick++);
+        lastDrawAt = now;
+      }
       rafId = requestAnimationFrame(drawFrame);
     };
-    drawFrame();
+    drawFrame(performance.now());
 
     const recordingStream = canvas.captureStream(RECORDING_FPS);
     const mimeType = selectSupportedRecordingMimeType(

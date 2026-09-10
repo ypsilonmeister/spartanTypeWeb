@@ -125,8 +125,10 @@ Worker 側にも `[AnalysisProfile] HandLandmarker delegate: ...` が単独で�
 - `decode.createImageBitmap` は非同期区間なので、他の処理と重なった時間も含む。
   排他的なメインスレッド占有時間は `decode.drawImage` +
   `postprocess.*` + `finalize.*` + `transfer.postMessage` で見る。
-- `frames.presented` が `session.durationSec × 30`(録画 fps) を大きく下回るなら、
+- `frames.presented` が `session.durationSec × 15`(録画 fps) を大きく下回るなら、
   デコード側が再生倍率に追いついていない。
+- 録画は 15fps (`useSessionRecorder.ts` の `RECORDING_FPS`)。wall の床は
+  `duration × 録画fps ÷ 端末のデコード上限 (~85fps)` なので、30fps → 15fps で床は半分になる。
 
 
 ---
