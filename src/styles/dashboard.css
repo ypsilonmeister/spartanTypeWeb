@@ -280,11 +280,19 @@
   flex-direction: column;
   align-items: center;
   gap: 8px;
+  /* The panel wraps a fixed-size canvas; with content-box sizing the padding
+     and border made it 6px wider than its 340px column, which gave the whole
+     dashboard a horizontal scrollbar. Size it to the column and let the
+     canvas scale down (it keeps its aspect ratio) if the column is narrower. */
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .growth-tree-canvas {
   border-radius: 8px;
   background: radial-gradient(circle, rgba(20, 20, 30, 0.8) 0%, rgba(10, 10, 15, 0.9) 100%);
+  max-width: 100%;
+  height: auto;
 }
 
 .growth-tree-caption {

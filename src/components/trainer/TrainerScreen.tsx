@@ -17,6 +17,13 @@ import '../../styles/cameraPreview.css';
 import '../../styles/trainer.css';
 import type { CalibrationCameraSize, CalibrationHomography } from '../../types/calibration';
 
+/**
+ * この幅以上で 2 カラム (キーボード | コントロール) になる。
+ * trainer.css の `@media (max-width: 999px)` と対で、横向き 10 インチタブレット
+ * (CSS 幅 1098px) が縦積みに落ちないよう 1100 から下げてある。
+ */
+const TWO_COLUMN_MIN_WIDTH = 1000;
+
 interface TrainerScreenProps {
   layout: KeyboardLayout;
   homography: CalibrationHomography | null;
@@ -105,16 +112,27 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
   } = usePracticeDrill();
 
   const keyboardUnitSize = useMemo(() => {
-    const appPadding = viewportWidth <= 700 ? 32 : viewportWidth <= 1100 ? 48 : 64;
-    const sidePanelWidth = isRecording && viewportWidth > 1100 ? 332 : 0;
-    const keyboardChrome = 48;
+    const isTwoColumn = viewportWidth >= TWO_COLUMN_MIN_WIDTH;
+    const appPadding = viewportWidth <= 700 ? 32 : isTwoColumn ? 64 : 48;
+    // 2 カラムでは右カラム (待機中 340px + gap 32、録画中 300px + gap 24) が常にある。
+    // 待機中に差し引かないと、キーボードが左カラムの基準幅より広く組まれて
+    // flex-wrap で右カラムが下に落ちる (1098px の横向きタブレットで実際に起きた)。
+    const sidePanelWidth = !isTwoColumn ? 0 : isRecording ? 332 : 372;
+    // VirtualKeyboard は layout.width × unit の外側に padding 32 + border 2 を持ち、
+    // ラッパー (.trainer-keyboard-wrapper) の padding 32 と .app-content の
+    // スクロールバー溝 ~16 も列幅から引かれる。ここを小さく見積もると
+    // キーボードが列からはみ出して横スクロールバーが出る。
+    const keyboardChrome = 84;
     const availableWidth = Math.max(
       320,
       viewportWidth - appPadding - sidePanelWidth - keyboardChrome
     );
     const fitUnitSize = Math.floor(availableWidth / layout.width);
     const targetUnitSize = isRecording ? 56 : 42;
-    const minimumUnitSize = isRecording ? 44 : 32;
+    // 最小サイズは可読性のための下限だが、列に収まる幅 (fit) を上回ってまでは
+    // 効かせない。17U の分割配列 + 横向きタブレットでは 44 の下限が 782px の
+    // キーボードを生み、695px の列からはみ出していた。
+    const minimumUnitSize = Math.min(isRecording ? 44 : 32, fitUnitSize);
 
     // Cap by viewport height too: on short/tablet screens the camera preview,
     // word display and controls already take up most of the height, so the

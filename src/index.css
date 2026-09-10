@@ -107,6 +107,19 @@ body {
   overflow: hidden;
 }
 
+/* Short viewports (landscape tablets: ~630px of usable height after the
+   browser chrome). The 2rem shell padding plus the 2rem navbar margin cost
+   ~100px before any content; trim them so the trainer fits without scrolling. */
+@media (max-height: 700px) {
+  .app-shell {
+    padding: var(--space-md) var(--space-xl);
+  }
+
+  .app-navbar {
+    margin-bottom: var(--space-md);
+  }
+}
+
 /* ---- Navigation Bar ---- */
 .app-navbar {
   display: flex;
