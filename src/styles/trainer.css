@@ -27,13 +27,22 @@
   flex-direction: column;
   align-items: center;
   gap: var(--space-lg);
-  flex: 1 1 640px;
+  /* 600 + right column 340 + gap 32 = 972 fits a 1000px viewport minus the
+     shell padding and the reserved scrollbar gutter. min-width: 0 lets the
+     column shrink below the keyboard's intrinsic width (the keyboard wrapper
+     scrolls horizontally) instead of forcing the right column to wrap. */
+  flex: 1 1 600px;
+  min-width: 0;
   max-width: 720px;
 }
 
 .trainer-layout.is-recording .trainer-left-column {
   align-items: stretch;
-  flex: 1 1 780px;
+  /* Basis must fit next to the 300px right column inside a 1000px-wide
+     viewport minus the shell padding (1000 - 64 - 300 - 24 gap), otherwise
+     flex-wrap drops the right column below and the page becomes tall again.
+     It still grows up to max-width on wide screens. */
+  flex: 1 1 600px;
   max-width: 900px;
   gap: var(--space-md);
 }
@@ -348,7 +357,11 @@
   box-sizing: border-box;
 }
 
-@media (max-width: 1100px) {
+/* Stack into one column below 1000px. Landscape 10" tablets report a CSS
+   width just under 1100px (Blackview Tab 7 Pro: 1098px), so the old 1100px
+   threshold gave them the phone layout, with the keyboard two screens down.
+   Keep in sync with TWO_COLUMN_MIN_WIDTH in TrainerScreen.tsx. */
+@media (max-width: 999px) {
   .trainer-layout {
     flex-direction: column;
     flex-wrap: nowrap;
@@ -372,17 +385,30 @@
     flex: 0 0 auto;
   }
 
+  /* Dissolve the right column so its children take part in the stacked
+     order: control panel first (the start button stays reachable), then the
+     word display / keyboard / camera, and the growth tree last. With the
+     whole column first, the 300px+ tree sat above the word display and
+     pushed everything you look at while typing a screen down (portrait
+     tablet: word display at y=839 in a 926px viewport). */
   .trainer-right-column {
-    order: -1;
+    display: contents;
   }
 
   .trainer-control-panel {
+    order: -1;
     box-sizing: border-box;
+  }
+
+  .trainer-right-column .growth-tree-panel {
+    order: 10;
   }
 
   .trainer-camera-preview {
     align-self: center;
-    max-width: 680px;
+    /* Idle preview: cap by height too, so a portrait tablet does not spend
+       a third of the screen on it before the keyboard. */
+    max-width: min(680px, calc(26vh * 16 / 9));
   }
 
   .trainer-layout.is-recording .trainer-camera-preview {
@@ -438,5 +464,30 @@
 
   .trainer-recording-hint {
     display: none;
+  }
+
+  /* The growth tree is a fixed 276x300 canvas; on a ~630px-tall landscape
+     tablet it pushes the right column past the viewport. Scale it down
+     (canvas keeps its aspect ratio) so control panel + tree fit one screen. */
+  .trainer-right-column .growth-tree-panel {
+    padding: 8px;
+    gap: 4px;
+  }
+
+  .trainer-right-column .growth-tree-canvas {
+    width: auto;
+    max-width: 100%;
+    max-height: 20vh;
+  }
+
+  .trainer-right-column,
+  .trainer-layout.is-recording .trainer-right-column {
+    gap: var(--space-sm);
+  }
+
+  /* While recording the preview sits under the keyboard; a 240px-wide 16:9
+     box (135px tall) is what pushed the left column past a 630px viewport. */
+  .trainer-layout.is-recording .trainer-camera-preview {
+    width: min(180px, 30vw);
   }
 }
