@@ -5,12 +5,12 @@
 
 ## 有効化
 
-`npm run build:profile` (= `vite build --mode profile`) でビルドする。
-通常の `npm run build` では計測コードがビルド時に完全に消える
-(成果物に `AnalysisProfile` の文字列が残らないことを確認済み)。
+**計測は常時有効。** 通常の `npm run build` でも公開サイトでも、解析のたびに
+コンソールへ `[AnalysisProfile]` が出て、結果が localStorage に残る
+(probe.html の 7 番で読める)。コストは 1 フレームあたり Map の更新数回。
 
-フラグは `.env.profile` の `VITE_ANALYSIS_PROFILE=1` が供給する。
-シェルの環境変数構文 (`VAR=1 cmd`) は PowerShell で動かないため、mode で切り替えている。
+`npm run build:profile` (= `vite build --mode profile`) は計測用の便宜ビルドで、
+違いは Service Worker を自己破壊型にすることだけ (下記)。
 
 > **重要: `npm run dev` では計測できない。**
 > 現在の Vite では dev サーバがクラシックワーカーをバンドルせず ESM のまま配信するため、
@@ -166,8 +166,7 @@ npm run preview -- --host
 probe.html は通常の `npm run build` にも常に含まれる (公開サイトでもそのまま開ける)。
 独立したエントリなので開かない限り読み込まれず、PWA の precache からも除外している
 (`vite.config.ts` の `globIgnores` / `navigateFallbackDenylist`)。
-ただし **7. の解析計測は profile ビルドのアプリで解析したときだけ**残る
-(通常ビルドでは計測コード自体が消えているため)。
+7. の解析計測も常時有効なので、公開サイトで解析したあとにそのまま読める。
 
 ## 各セクション
 

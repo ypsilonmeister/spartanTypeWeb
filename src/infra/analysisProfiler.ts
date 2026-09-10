@@ -2,17 +2,18 @@
  * セッション終了後の解析パイプライン (デコード → MediaPipe 推論 → 座標変換 → 集計)
  * を段階ごとに計測するためのプロファイラ。
  *
- * `VITE_ANALYSIS_PROFILE=1` を付けて dev サーバ / ビルドを起動したときだけ有効になる。
- * フラグが無いときは `isAnalysisProfilingEnabled` がビルド時に定数 false へ畳み込まれ、
- * 呼び出し側には即 return するだけの no-op プロファイラが渡る (本番の挙動は不変)。
+ * 常時有効。計測結果は localStorage に残り、probe.html で読めるほか、
+ * 次回の解析で端末に合わせてパラメータ (再生倍率・F・切り出し) を決める材料になる。
+ * コストは 1 フレームあたり Map の更新数回と、解析 1 回ごとのコンソール出力 +
+ * localStorage 書き込み 1 件。
+ *
+ * 呼び出し側は `createAnalysisProfiler()` を経由し、無効化したい経路には
+ * `noopAnalysisProfiler` を渡せる構造は残してある。
  *
  * メインスレッドと Worker の両方から import される。
  */
 
-const PROFILE_FLAG = import.meta.env.VITE_ANALYSIS_PROFILE;
-
-export const isAnalysisProfilingEnabled =
-  PROFILE_FLAG === '1' || PROFILE_FLAG === 'true';
+export const isAnalysisProfilingEnabled = true;
 
 /**
  * 最後の計測結果を保存する localStorage キー。

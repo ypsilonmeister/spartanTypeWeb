@@ -553,7 +553,7 @@ export const DeviceProbePage: React.FC = () => {
       <section className="probe-card">
         <h2>7. 最後の解析計測 ([AnalysisProfile])</h2>
         <p className="probe-note">
-          profile ビルドのアプリで offline セッションを 1 本解析すると、その計測結果がここに出ます
+          アプリで offline セッションを 1 本解析すると、その計測結果がここに出ます
           (同じ端末・同じオリジンの localStorage 経由)。解析後にこのページを開き直すか、再読込ボタンを押してください。
         </p>
         <button className="probe-button" onClick={reloadLastProfile}>再読込</button>
