@@ -3,27 +3,26 @@ import react from '@vitejs/plugin-react'
 
 import { VitePWA } from 'vite-plugin-pwa'
 
-// dev 専用のデバイスプローブ (probe.html) をビルド成果物に含めるか。
-//
-// `npm run build:profile` (= vite build --mode profile) のときだけ含める。
+// 計測 (profile) ビルドかどうか。`npm run build:profile` (= vite build --mode profile)。
 // mode で判定するのはシェル非依存にするため (bash の `VAR=1 cmd` は PowerShell で動かない)。
-// 併せて .env.profile が VITE_ANALYSIS_PROFILE=1 を供給し、計測コードが有効になる。
-// 通常の `npm run build` では input に入らないため、本番バンドルには
-// プローブページも MediaPipe プローブワーカーも一切含まれない。
+// 併せて .env.profile が VITE_ANALYSIS_PROFILE=1 を供給し、解析の計測コードが有効になる。
+const isProfileBuild = (mode: string) => mode === 'profile'
+  || process.env.VITE_ANALYSIS_PROFILE === '1'
+  || process.env.VITE_ANALYSIS_PROFILE === 'true';
+
+// デバイスプローブ (probe.html) は常に独立エントリとしてビルドする。
+// 本体 (index.html) とは別ページなので、開かない限り読み込まれない。
+// ただし PWA の precache には入れない (MediaPipe を含むプローブワーカー ~137KB を
+// 全ユーザーに先読みさせない) ので、下の workbox 設定で除外している。
 //
 // dev サーバは root の HTML を常に配信するので `/probe.html` は素で開けるが、
 // 現状 dev はクラシックワーカーをバンドルしないため実測は preview で行うこと
 // (docs/analysis-profiling.md 参照)。
-const isProbeBuild = (mode: string) => mode === 'profile'
-  || process.env.VITE_ANALYSIS_PROFILE === '1'
-  || process.env.VITE_ANALYSIS_PROFILE === 'true';
-
 // base is injected at build time by the GitHub Pages workflow (e.g. "/reponame/").
 // Falls back to "/" for local dev and previews.
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
-  const input: Record<string, string> = { index: 'index.html' };
-  if (isProbeBuild(mode)) input.probe = 'probe.html';
+  const input: Record<string, string> = { index: 'index.html', probe: 'probe.html' };
 
   return {
     base: process.env.GITHUB_PAGES_BASE ?? '/',
@@ -37,9 +36,15 @@ export default defineConfig(({ mode }) => {
         // 計測ビルドでは Service Worker を「自己破壊型」にする: 起動時に自分を unregister して
         // precache を消す。再ビルド/再デプロイ後も古い版が配信され続ける事故を防ぐ。
         // 通常ビルドでは false なので本番の PWA 挙動は変わらない。
-        selfDestroying: isProbeBuild(mode),
+        selfDestroying: isProfileBuild(mode),
         includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
         workbox: {
+          // probe.html とその資産 (プローブページ本体・MediaPipe を含むプローブワーカー) は
+          // 開いたときだけ取りに行けばよいので precache しない。
+          globIgnores: ['probe.html', 'assets/probe-*', 'assets/deviceProbe.worker-*'],
+          // precache に無い URL への遷移は既定で index.html (アプリシェル) に差し替えられる。
+          // probe.html は別ページなので対象から外す。
+          navigateFallbackDenylist: [/\/probe\.html$/],
           // MediaPipe のモデル(~10MB)と WASM は CDN から取得するため、
           // precache せず実行時に CacheFirst でキャッシュする。
           // 一度オンラインで読み込めば以降はオフラインでも手の検出が動作する。
