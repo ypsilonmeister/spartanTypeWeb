@@ -124,11 +124,10 @@ describe('regression gate ported from scripts/verify_homography.cjs', () => {
     expect(centre.y).toBeLessThan(5);
   });
 
-  // 既知の穴: 3 点が一直線に並ぶ退化配置では連立方程式が特異になるが、
-  // 現行の LS 実装は null を返さず、要素が 1e15 級の行列を返してしまう。
-  // (旧 verify_homography.cjs の厳密解法は特異行列を検出して失敗していた。)
-  // 修正されてこのテストが通り始めたら it.fails を it に戻すこと。
-  it.fails('rejects collinear correspondences instead of returning an ill-conditioned matrix', () => {
+  // 3 点が一直線の退化配置。連立方程式は特異にならず解けてしまうが、
+  // 返る H は階数落ち (det ≈ 0) で分母 w が点の間で符号反転する。
+  // isValidHomography がこれを弾いて null を返す。
+  it('rejects correspondences with three collinear points instead of returning a rank-deficient matrix', () => {
     const collinear: Point[] = [
       { x: 0, y: 0 },
       { x: 1, y: 1 },
@@ -136,5 +135,58 @@ describe('regression gate ported from scripts/verify_homography.cjs', () => {
       { x: 0, y: 5 },
     ];
     expect(computeHomographyLS(collinear, layoutRect)).toBeNull();
+  });
+
+  it('rejects four points that all lie on one line', () => {
+    const line: Point[] = [
+      { x: 0, y: 0 },
+      { x: 1, y: 0.5 },
+      { x: 2, y: 1 },
+      { x: 3, y: 1.5 },
+    ];
+    expect(computeHomographyLS(line, layoutRect)).toBeNull();
+  });
+});
+
+/**
+ * 退化検出が、実際のキャリブレーション配置を誤って弾かないことの保証。
+ * ホーム行の 8 指は一直線に並ぶ (8 点が共線) が、コーナー 4 点が平面的広がりを
+ * 与えるので系は正則で、有効な H が求まらなければならない。
+ */
+describe('validity check keeps real calibration layouts', () => {
+  // 適当な射影で「カメラ画素」を合成する
+  const cameraOf = (p: Point): Point => {
+    const X = p.x * 40;
+    const Y = p.y * 40;
+    const w = 0.0008 * X + 0.0012 * Y + 1;
+    return { x: (1.8 * X + 0.15 * Y + 100) / w, y: (0.05 * X + 1.6 * Y + 60) / w };
+  };
+  const homeRow: Point[] = [1.5, 2.5, 3.5, 4.5, 7.5, 8.5, 9.5, 10.5].map((x) => ({ x, y: 2.5 }));
+  const corners: Point[] = [
+    { x: 1.25, y: 1.5 },
+    { x: 1.75, y: 3.5 },
+    { x: 10.75, y: 1.5 },
+    { x: 10.25, y: 3.5 },
+  ];
+
+  it('solves 8 collinear home-row fingers plus 4 corners', () => {
+    const dst = [...homeRow, ...corners];
+    const src = dst.map(cameraOf);
+    const H = computeHomographyLS(src, dst);
+    expect(H).not.toBeNull();
+    expect(residual(H as number[], src, dst)).toBeLessThan(1e-6);
+  });
+
+  it('solves one hand of a split layout: 4 home-row fingers plus its 2 corners', () => {
+    const dst = [...homeRow.slice(0, 4), corners[0], corners[1]];
+    const src = dst.map(cameraOf);
+    const H = computeHomographyLS(src, dst);
+    expect(H).not.toBeNull();
+    expect(residual(H as number[], src, dst)).toBeLessThan(1e-6);
+  });
+
+  it('rejects home-row fingers alone (no vertical spread)', () => {
+    const dst = homeRow.slice(0, 4);
+    expect(computeHomographyLS(dst.map(cameraOf), dst)).toBeNull();
   });
 });

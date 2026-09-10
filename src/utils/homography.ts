@@ -117,6 +117,45 @@ function normalizationTransform(pts: Point[]): { T: number[]; normalized: Point[
   return { T, normalized };
 }
 
+/** |det H| がこれ × (最大要素)³ を下回れば階数落ちとみなす。退化入力の実測値は ~1e-29、正常配置は ≥ 1e-6。 */
+const DET_RELATIVE_TOLERANCE = 1e-12;
+/** 分母 w の最小値がこれ × 最大値を下回れば、対応点の間に無限遠が入り込んでいるとみなす。正常配置は ≥ 0.7。 */
+const W_RELATIVE_TOLERANCE = 1e-6;
+
+/**
+ * 求めた H が有効な射影変換かを検査する。
+ *
+ * 4 対応点のうち 3 点が一直線に並ぶような入力では、連立方程式自体は特異にならず
+ * 一意に解けてしまうが、返ってくるのは階数落ちした H (det ≈ 0) で、分母
+ * w = h20·x + h21·y + h22 が対応点の間で符号反転する。そのまま使うと指先の座標が
+ * 桁違いの値に飛ぶ。ここで弾いて null を返し、キャリブレーションをやり直させる。
+ */
+function isValidHomography(H: number[], src: Point[]): boolean {
+  const scale = Math.max(...H.map(Math.abs));
+  if (!(scale > 0) || !Number.isFinite(scale)) return false;
+
+  const det =
+    H[0] * (H[4] * H[8] - H[5] * H[7]) -
+    H[1] * (H[3] * H[8] - H[5] * H[6]) +
+    H[2] * (H[3] * H[7] - H[4] * H[6]);
+  if (!(Math.abs(det) >= DET_RELATIVE_TOLERANCE * scale ** 3)) return false;
+
+  let sign = 0;
+  let wMin = Infinity;
+  let wMax = 0;
+  for (const p of src) {
+    const w = H[6] * p.x + H[7] * p.y + H[8];
+    if (!Number.isFinite(w)) return false;
+    const s = Math.sign(w);
+    if (s === 0) return false;
+    if (sign === 0) sign = s;
+    else if (s !== sign) return false;
+    wMin = Math.min(wMin, Math.abs(w));
+    wMax = Math.max(wMax, Math.abs(w));
+  }
+  return wMin >= W_RELATIVE_TOLERANCE * wMax;
+}
+
 /**
  * Computes a homography from N >= 4 point correspondences using least squares.
  *
@@ -177,7 +216,11 @@ export function computeHomographyLS(src: Point[], dst: Point[]): HomographyMatri
     // h33 = 1 に再正規化
     if (Math.abs(H[8]) < 1e-15) return null;
     const scale = 1 / H[8];
-    return H.map((v) => v * scale);
+    const result = H.map((v) => v * scale);
+
+    // 解けても射影として無効なら (3 点共線など) 使わせない
+    if (!isValidHomography(result, src)) return null;
+    return result;
   } catch (e) {
     console.error('Failed to compute least-squares homography', e);
     return null;
