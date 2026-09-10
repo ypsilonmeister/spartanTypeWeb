@@ -152,9 +152,11 @@ npm run preview -- --host
 `npm run dev` でも `/probe.html` は開けるが、**上記のワーカー問題で 1. と 6. は動かない**
 ので、実機計測は必ず preview で行うこと。
 
-通常の `npm run build` では `vite.config.ts` がこのエントリを input に含めないため、
-本番バンドルには probe.html もプローブワーカーも一切入らない
-(production ビルドの成果物がフラグ導入前とコンテンツハッシュまで一致することを確認済み)。
+probe.html は通常の `npm run build` にも常に含まれる (公開サイトでもそのまま開ける)。
+独立したエントリなので開かない限り読み込まれず、PWA の precache からも除外している
+(`vite.config.ts` の `globIgnores` / `navigateFallbackDenylist`)。
+ただし **7. の解析計測は profile ビルドのアプリで解析したときだけ**残る
+(通常ビルドでは計測コード自体が消えているため)。
 
 ## 各セクション
 
