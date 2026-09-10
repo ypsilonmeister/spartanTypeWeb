@@ -22,6 +22,10 @@ import type {
   ProbeRequest,
   ProbeResponse,
 } from '../../infra/deviceProbeProtocol';
+import {
+  ANALYSIS_PROFILE_STORAGE_KEY,
+  type StoredAnalysisProfile,
+} from '../../infra/analysisProfiler';
 import '../../styles/deviceProbe.css';
 
 /** 解析パイプラインが実際に使う再生倍率 (offlineAnalyzer.ts の ANALYSIS_PLAYBACK_RATE)。 */
@@ -58,6 +62,16 @@ function sendProbeRequest(
 
 const formatMs = (ms: number) => `${ms.toFixed(1)} ms`;
 
+/** アプリ本体が残した最後の [AnalysisProfile] を読む。無ければ null。 */
+function loadLastAnalysisProfile(): StoredAnalysisProfile | null {
+  try {
+    const raw = localStorage.getItem(ANALYSIS_PROFILE_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as StoredAnalysisProfile) : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * dev 専用のデバイス能力プローブ。`?probe=device` で開く。
  *
@@ -78,6 +92,8 @@ export const DeviceProbePage: React.FC = () => {
   const [decode, setDecode] = useState<DecodeThroughputResult | null>(null);
   const [initResults, setInitResults] = useState<ProbeInitResult[]>([]);
   const [benchRows, setBenchRows] = useState<BenchRow[]>([]);
+
+  const [lastProfile, setLastProfile] = useState(loadLastAnalysisProfile);
 
   const [cameraReady, setCameraReady] = useState(false);
   const [status, setStatus] = useState('起動時プローブを実行中...');
@@ -276,9 +292,10 @@ export const DeviceProbePage: React.FC = () => {
     decodeThroughput: decode,
     mediapipeInit: initResults,
     mediapipeBench: benchRows,
+    lastAnalysisProfile: lastProfile,
   }), [
     basics, webgl, workerContext, wasm, recordingCodecs, webCodecs,
-    cpuBench, sample, decode, initResults, benchRows,
+    cpuBench, sample, decode, initResults, benchRows, lastProfile,
   ]);
 
   const reportJson = useMemo(() => JSON.stringify(report, null, 2), [report]);
@@ -289,6 +306,27 @@ export const DeviceProbePage: React.FC = () => {
       .then(() => setStatus('JSON をクリップボードにコピーしました。'))
       .catch(() => setStatus('クリップボードが使えません。下のテキストを選択してコピーしてください。'));
   }, [report, reportJson]);
+
+  // Android の共有シート (Bluetooth / メール等) に直接渡す。USB デバッグ不要の回収経路。
+  const canShare = typeof navigator.share === 'function';
+  const shareReport = useCallback(() => {
+    if (!canShare) return;
+    const file = new File([reportJson], 'spartan-device-probe.json', { type: 'application/json' });
+    const withFile = { files: [file], title: 'SpartanType device probe' };
+    const payload = typeof navigator.canShare === 'function' && navigator.canShare(withFile)
+      ? withFile
+      : { title: 'SpartanType device probe', text: reportJson };
+    navigator.share(payload)
+      .then(() => setStatus('共有しました。'))
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.name === 'AbortError') return;
+        setStatus(`共有に失敗しました: ${err instanceof Error ? err.message : String(err)}`);
+      });
+  }, [canShare, reportJson]);
+
+  const reloadLastProfile = useCallback(() => {
+    setLastProfile(loadLastAnalysisProfile());
+  }, []);
 
   const decodeVerdict = decode
     ? decode.realtimeFactor >= ANALYSIS_PLAYBACK_RATE * 0.9
@@ -513,8 +551,65 @@ export const DeviceProbePage: React.FC = () => {
       </section>
 
       <section className="probe-card">
-        <h2>7. 結果の持ち帰り</h2>
-        <button className="probe-button" onClick={copyReport}>JSON をコピー / コンソールへ出力</button>
+        <h2>7. 最後の解析計測 ([AnalysisProfile])</h2>
+        <p className="probe-note">
+          profile ビルドのアプリで offline セッションを 1 本解析すると、その計測結果がここに出ます
+          (同じ端末・同じオリジンの localStorage 経由)。解析後にこのページを開き直すか、再読込ボタンを押してください。
+        </p>
+        <button className="probe-button" onClick={reloadLastProfile}>再読込</button>
+        {lastProfile ? (
+          <>
+            <p className="probe-verdict">
+              {lastProfile.title} — wall {(lastProfile.wallMs / 1000).toFixed(1)} s
+              {typeof lastProfile.notes['video.durationSec'] === 'number' && (
+                <>
+                  {' '}(duration / playbackRate ={' '}
+                  {(Number(lastProfile.notes['video.durationSec']) / Number(lastProfile.notes['analysis.playbackRate'] ?? 3)).toFixed(1)} s)
+                </>
+              )}
+              <br />
+              <span className="tone-dim">{lastProfile.savedAt}</span>
+            </p>
+            <table className="probe-table">
+              <tbody>
+                {Object.entries(lastProfile.notes).map(([key, value]) => (
+                  <tr key={`n-${key}`}><th>{key}</th><td>{String(value)}</td></tr>
+                ))}
+                {Object.entries(lastProfile.counters).map(([key, value]) => (
+                  <tr key={`c-${key}`}><th>{key}</th><td>{value}</td></tr>
+                ))}
+              </tbody>
+            </table>
+            <table className="probe-table">
+              <thead>
+                <tr><th>bucket</th><th>total</th><th>calls</th><th>avg</th><th>% wall</th></tr>
+              </thead>
+              <tbody>
+                {Object.entries(lastProfile.timings).map(([bucket, { totalMs, calls }]) => (
+                  <tr key={bucket}>
+                    <td>{bucket}</td>
+                    <td>{formatMs(totalMs)}</td>
+                    <td>{calls}</td>
+                    <td>{calls > 0 ? formatMs(totalMs / calls) : '-'}</td>
+                    <td>{lastProfile.wallMs > 0 ? ((100 * totalMs) / lastProfile.wallMs).toFixed(1) : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        ) : (
+          <p className="probe-note tone-dim">まだ計測結果がありません。</p>
+        )}
+      </section>
+
+      <section className="probe-card">
+        <h2>8. 結果の持ち帰り</h2>
+        <div className="probe-actions">
+          <button className="probe-button" onClick={copyReport}>JSON をコピー / コンソールへ出力</button>
+          {canShare && (
+            <button className="probe-button" onClick={shareReport}>共有 (Bluetooth / メール等)</button>
+          )}
+        </div>
         <textarea className="probe-json" readOnly value={reportJson} rows={14} />
       </section>
     </div>

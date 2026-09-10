@@ -14,6 +14,22 @@ const PROFILE_FLAG = import.meta.env.VITE_ANALYSIS_PROFILE;
 export const isAnalysisProfilingEnabled =
   PROFILE_FLAG === '1' || PROFILE_FLAG === 'true';
 
+/**
+ * 最後の計測結果を保存する localStorage キー。
+ * USB デバッグできない端末でもコンソールを見ずに回収できるよう、
+ * 同一オリジンの probe.html がこのキーを読んで表示・共有する。
+ */
+export const ANALYSIS_PROFILE_STORAGE_KEY = 'spartan.analysisProfile.last';
+
+export interface StoredAnalysisProfile {
+  title: string;
+  savedAt: string;
+  wallMs: number;
+  notes: Record<string, string | number>;
+  counters: Record<string, number>;
+  timings: Record<string, { totalMs: number; calls: number }>;
+}
+
 export interface AnalysisProfiler {
   readonly enabled: boolean;
   /** カウンタを加算する (フレーム数など)。 */
@@ -108,19 +124,29 @@ class EnabledAnalysisProfiler implements AnalysisProfiler {
     console.table(noteRows);
     console.table(counterRows);
     console.table(timingRows);
-    console.log(
-      '[AnalysisProfile] JSON',
-      JSON.stringify({
-        title,
-        wallMs: Number(wallMs.toFixed(1)),
-        notes: Object.fromEntries(this.notes),
-        counters: Object.fromEntries(this.counters),
-        timings: Object.fromEntries(
-          timingRows.map((row) => [row.bucket, { totalMs: row.totalMs, calls: row.calls }])
-        ),
-      })
-    );
+    const stored: StoredAnalysisProfile = {
+      title,
+      savedAt: new Date().toISOString(),
+      wallMs: Number(wallMs.toFixed(1)),
+      notes: Object.fromEntries(this.notes),
+      counters: Object.fromEntries(this.counters),
+      timings: Object.fromEntries(
+        timingRows.map((row) => [row.bucket, { totalMs: row.totalMs, calls: row.calls }])
+      ),
+    };
+    const json = JSON.stringify(stored);
+    console.log('[AnalysisProfile] JSON', json);
     console.groupEnd();
+
+    // report() はメインスレッドからしか呼ばれないが、このモジュールは Worker にも
+    // import されるため localStorage の有無は必ず確認する。
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(ANALYSIS_PROFILE_STORAGE_KEY, json);
+      }
+    } catch (err) {
+      console.warn('[AnalysisProfile] could not persist the report:', err);
+    }
   }
 }
 
