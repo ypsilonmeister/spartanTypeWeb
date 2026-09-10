@@ -3,12 +3,11 @@ import react from '@vitejs/plugin-react'
 
 import { VitePWA } from 'vite-plugin-pwa'
 
-// 計測 (profile) ビルドかどうか。`npm run build:profile` (= vite build --mode profile)。
+// 計測用 (profile) ビルドかどうか。`npm run build:profile` (= vite build --mode profile)。
+// 解析の計測自体は常時有効なので、profile ビルドとの違いは Service Worker を
+// 自己破壊型にすること (再ビルド/再デプロイ後に古い版が配信され続けない) だけ。
 // mode で判定するのはシェル非依存にするため (bash の `VAR=1 cmd` は PowerShell で動かない)。
-// 併せて .env.profile が VITE_ANALYSIS_PROFILE=1 を供給し、解析の計測コードが有効になる。
-const isProfileBuild = (mode: string) => mode === 'profile'
-  || process.env.VITE_ANALYSIS_PROFILE === '1'
-  || process.env.VITE_ANALYSIS_PROFILE === 'true';
+const isProfileBuild = (mode: string) => mode === 'profile';
 
 // デバイスプローブ (probe.html) は常に独立エントリとしてビルドする。
 // 本体 (index.html) とは別ページなので、開かない限り読み込まれない。

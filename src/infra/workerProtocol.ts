@@ -15,8 +15,7 @@ export interface DetectRequest {
 export type WorkerRequest = InitRequest | DetectRequest;
 
 /**
- * 計測用のワーカー側実測値。VITE_ANALYSIS_PROFILE が有効なときだけ付与される。
- * 無効時は常に undefined なので通常のペイロードは変わらない。
+ * 計測用のワーカー側実測値。isAnalysisProfilingEnabled のときに付与される (現在は常時)。
  */
 export interface DetectProfile {
   /** landmarker.detectForVideo() 単体の所要時間 (ms)。 */

@@ -1,16 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-// isAnalysisProfilingEnabled はモジュール読み込み時に import.meta.env を見て決まるため、
-// テストごとに env をスタブしてからモジュールを読み直す。
-async function loadProfiler(flag: string | undefined) {
-  vi.resetModules();
-  if (flag === undefined) {
-    vi.unstubAllEnvs();
-  } else {
-    vi.stubEnv('VITE_ANALYSIS_PROFILE', flag);
-  }
-  return import('../analysisProfiler');
-}
+import {
+  ANALYSIS_PROFILE_STORAGE_KEY,
+  createAnalysisProfiler,
+  isAnalysisProfilingEnabled,
+  noopAnalysisProfiler,
+} from '../analysisProfiler';
 
 function installLocalStorageStub() {
   const store = new Map<string, string>();
@@ -37,29 +31,25 @@ describe('analysisProfiler', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    vi.unstubAllEnvs();
     Reflect.deleteProperty(globalThis, 'localStorage');
   });
 
-  it('is a no-op when the flag is unset and never touches storage', async () => {
-    const { createAnalysisProfiler, isAnalysisProfilingEnabled } = await loadProfiler(undefined);
-    expect(isAnalysisProfilingEnabled).toBe(false);
+  it('is always enabled', () => {
+    expect(isAnalysisProfilingEnabled).toBe(true);
+    expect(createAnalysisProfiler().enabled).toBe(true);
+  });
 
-    const profiler = createAnalysisProfiler();
-    expect(profiler.enabled).toBe(false);
-    profiler.count('frames.presented');
-    profiler.add('inference.detectForVideo', 150);
-    expect(profiler.measure('x', () => 42)).toBe(42);
-    profiler.report('offline analysis');
-
+  it('keeps a no-op profiler for paths that opt out, which never touches storage', () => {
+    expect(noopAnalysisProfiler.enabled).toBe(false);
+    noopAnalysisProfiler.count('frames.presented');
+    noopAnalysisProfiler.add('inference.detectForVideo', 150);
+    expect(noopAnalysisProfiler.measure('x', () => 42)).toBe(42);
+    noopAnalysisProfiler.report('offline analysis');
     expect(store.size).toBe(0);
   });
 
-  it('persists the report to localStorage so probe.html can read it back', async () => {
-    const { createAnalysisProfiler, ANALYSIS_PROFILE_STORAGE_KEY } = await loadProfiler('1');
-
+  it('persists the report to localStorage so probe.html can read it back', () => {
     const profiler = createAnalysisProfiler();
-    expect(profiler.enabled).toBe(true);
     profiler.note('mediapipe.delegate', 'GPU');
     profiler.note('video.durationSec', 24.4);
     profiler.count('frames.presented', 3);
@@ -82,10 +72,8 @@ describe('analysisProfiler', () => {
     expect(stored.timings['finalize.exportSession'].calls).toBe(1);
   });
 
-  it('still reports when localStorage is unavailable (worker-like context)', async () => {
+  it('still reports when localStorage is unavailable (worker-like context)', () => {
     Reflect.deleteProperty(globalThis, 'localStorage');
-    const { createAnalysisProfiler } = await loadProfiler('1');
-
     const profiler = createAnalysisProfiler();
     profiler.count('frames.presented');
     expect(() => profiler.report('offline analysis')).not.toThrow();
