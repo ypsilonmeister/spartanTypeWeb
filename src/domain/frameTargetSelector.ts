@@ -44,6 +44,12 @@ export interface FrameTargetStats {
   unreached: number;
 }
 
+/** 目標時刻と、それを生んだ打鍵のインデックス。 */
+export interface FrameTarget {
+  timeMs: number;
+  keystrokeIndex: number;
+}
+
 export interface FrameTargetSelector {
   /**
    * 提示されたフレーム時刻 (動画時間 ms) を推論したいか。副作用なし。
@@ -52,9 +58,10 @@ export interface FrameTargetSelector {
   wants(frameTimeMs: number): boolean;
   /**
    * そのフレームを推論に回すと確定したときに呼ぶ。
-   * このフレームで満たされる目標 (frameTimeMs 以前のもの) をすべて消費する。
+   * このフレームで満たされる目標 (frameTimeMs 以前のもの) をすべて消費し、
+   * それらの打鍵インデックス (重複なし・昇順) を返す。
    */
-  markCaptured(frameTimeMs: number): void;
+  markCaptured(frameTimeMs: number): number[];
   /** 動画終了時に呼び、未到達の目標を確定させて統計を返す。 */
   finish(): FrameTargetStats;
   stats(): FrameTargetStats;
@@ -71,13 +78,13 @@ export const DEFAULT_FRAME_TARGET_OPTIONS: FrameTargetSelectorOptions = {
  * 打鍵時刻とオフセットから、昇順の目標時刻列を作る。
  * 打鍵が未ソートでも構わない。
  */
-export function buildFrameTargets(keystrokeTimesMs: number[], offsetsMs: number[]): number[] {
-  const targets: number[] = [];
-  for (const t of keystrokeTimesMs) {
-    if (!Number.isFinite(t)) continue;
-    for (const offset of offsetsMs) targets.push(t + offset);
-  }
-  return targets.sort((a, b) => a - b);
+export function buildFrameTargets(keystrokeTimesMs: number[], offsetsMs: number[]): FrameTarget[] {
+  const targets: FrameTarget[] = [];
+  keystrokeTimesMs.forEach((t, keystrokeIndex) => {
+    if (!Number.isFinite(t)) return;
+    for (const offset of offsetsMs) targets.push({ timeMs: t + offset, keystrokeIndex });
+  });
+  return targets.sort((a, b) => a.timeMs - b.timeMs);
 }
 
 export function createFrameTargetSelector(
@@ -100,7 +107,7 @@ export function createFrameTargetSelector(
   // maxLagMs を超えて過ぎ去った目標を諦めて読み飛ばす。
   // wants() からも呼ぶが、統計の更新以外に状態を持たないので副作用は「諦め」の確定だけ。
   const abandonStale = (frameTimeMs: number) => {
-    while (next < targets.length && frameTimeMs - targets[next] > maxLagMs) {
+    while (next < targets.length && frameTimeMs - targets[next].timeMs > maxLagMs) {
       stats.abandoned++;
       next++;
     }
@@ -109,22 +116,26 @@ export function createFrameTargetSelector(
   return {
     wants(frameTimeMs) {
       abandonStale(frameTimeMs);
-      return next < targets.length && frameTimeMs >= targets[next];
+      return next < targets.length && frameTimeMs >= targets[next].timeMs;
     },
 
     markCaptured(frameTimeMs) {
       abandonStale(frameTimeMs);
       // このフレームは frameTimeMs 以前のすべての未消費目標を満たす。
       // (打鍵が提示間隔より密なとき、1 フレームが複数の打鍵を担うのは正しい。)
-      let satisfied = 0;
+      const keystrokeIndices: number[] = [];
       let lateCount = 0;
-      while (next < targets.length && targets[next] <= frameTimeMs) {
-        if (frameTimeMs - targets[next] > lateThresholdMs) lateCount++;
-        satisfied++;
+      while (next < targets.length && targets[next].timeMs <= frameTimeMs) {
+        const target = targets[next];
+        if (frameTimeMs - target.timeMs > lateThresholdMs) lateCount++;
+        if (!keystrokeIndices.includes(target.keystrokeIndex)) {
+          keystrokeIndices.push(target.keystrokeIndex);
+        }
+        stats.captured++;
         next++;
       }
-      stats.captured += satisfied;
       stats.late += lateCount;
+      return keystrokeIndices.sort((a, b) => a - b);
     },
 
     finish() {

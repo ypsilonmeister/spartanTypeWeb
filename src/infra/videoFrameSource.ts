@@ -1,17 +1,30 @@
 import { noopAnalysisProfiler, type AnalysisProfiler } from './analysisProfiler';
+import type { CropRect } from '../domain/frameCrop';
 
 type VideoWithCallback = HTMLVideoElement & {
   requestVideoFrameCallback: (callback: () => void) => number;
 };
 
 /**
+ * 1 フレームから切り出す領域。rect が無ければフレーム全体。
+ * 呼び出し側は id で「どの領域の ImageBitmap か」を受け取る。
+ */
+export interface CaptureRegion {
+  id: string;
+  rect?: CropRect;
+}
+
+/**
  * 提示されたフレームをどう扱うか。
- * - capture: この場で canvas へ描いて ImageBitmap 化し onFrame へ渡す
+ * - capture: 指定した領域ごとに ImageBitmap 化して onFrame へ渡す
  * - skip:    何もしない (推論対象ではない)
  * - wait:    推論したいがキューが埋まっている。フレームを捨てずに再生を止め、
  *            resume() が呼ばれたら同じフレームを評価し直す
  */
-export type FrameDecision = 'capture' | 'skip' | 'wait';
+export type FrameDecision =
+  | 'skip'
+  | 'wait'
+  | { action: 'capture'; regions: CaptureRegion[] };
 
 interface VideoFrameSourceOptions {
   blob: Blob;
@@ -21,7 +34,7 @@ interface VideoFrameSourceOptions {
   expectedDurationSeconds?: number;
   /** 提示フレームの動画時刻 (ms) を受け取り、扱いを返す。 */
   decideFrame: (timestampMs: number) => FrameDecision;
-  onFrame: (bitmap: ImageBitmap, timestamp: number) => void;
+  onFrame: (bitmap: ImageBitmap, timestampMs: number, regionId: string) => void;
   onProgress: (progress: number) => void;
   onLoaded: (width: number, height: number, duration: number) => void;
   onEnded: () => void;
@@ -100,34 +113,47 @@ export function createVideoFrameSource(options: VideoFrameSourceOptions): VideoF
     }
   };
 
-  const captureCurrentFrame = () => {
-    lastProcessedTime = video.currentTime;
+  /** 領域 1 つぶんの ImageBitmap を作る。切り出しは video から直接、全体は canvas 経由。 */
+  const bitmapForRegion = (region: CaptureRegion): Promise<ImageBitmap> => {
+    if (region.rect) {
+      const { x, y, width, height } = region.rect;
+      return createImageBitmap(video, x, y, width, height);
+    }
 
     const ctx = canvas.getContext('2d');
     if (!ctx) {
-      onError(new Error('Could not create analysis canvas context.'));
-      return;
+      return Promise.reject(new Error('Could not create analysis canvas context.'));
     }
-
-    profiler.count('frames.captured');
     profiler.measure('decode.drawImage', () => {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     });
+    return createImageBitmap(canvas);
+  };
 
-    const endBitmapSpan = profiler.span('decode.createImageBitmap');
-    createImageBitmap(canvas)
-      .then((bitmap) => {
-        endBitmapSpan();
-        if (cancelled || ended) {
-          bitmap.close();
-          return;
-        }
-        onFrame(bitmap, video.currentTime * 1000);
-      })
-      .catch((error) => {
-        endBitmapSpan();
-        onError(error);
-      });
+  const captureCurrentFrame = (regions: CaptureRegion[]) => {
+    lastProcessedTime = video.currentTime;
+    // 時刻はキャプチャを決めた時点で確定させる (createImageBitmap の解決を待つ間に
+    // video.currentTime が進んでも、この ImageBitmap はこの時刻のフレーム)。
+    const timestampMs = video.currentTime * 1000;
+
+    profiler.count('frames.captured');
+    for (const region of regions) {
+      profiler.count('frames.capturedRegions');
+      const endBitmapSpan = profiler.span('decode.createImageBitmap');
+      bitmapForRegion(region)
+        .then((bitmap) => {
+          endBitmapSpan();
+          if (cancelled || ended) {
+            bitmap.close();
+            return;
+          }
+          onFrame(bitmap, timestampMs, region.id);
+        })
+        .catch((error) => {
+          endBitmapSpan();
+          onError(error);
+        });
+    }
   };
 
   /**
@@ -144,9 +170,7 @@ export function createVideoFrameSource(options: VideoFrameSourceOptions): VideoF
     if (video.currentTime === lastProcessedTime) return true;
 
     const decision = decideFrame(video.currentTime * 1000);
-    if (decision === 'capture') {
-      captureCurrentFrame();
-    } else if (decision === 'wait') {
+    if (decision === 'wait') {
       // 目標フレームなのに推論キューが埋まっている。捨てずに止めて待つ。
       // 再生を止めれば新しいフレームは提示されないので、ループもここで途切れる。
       pausedForBackpressure = true;
@@ -155,9 +179,12 @@ export function createVideoFrameSource(options: VideoFrameSourceOptions): VideoF
       video.pause();
       reportProgress();
       return false;
-    } else if (isNewlyPresentedFrame) {
-      profiler.count('frames.skipped');
     }
+    if (decision === 'skip') {
+      if (isNewlyPresentedFrame) profiler.count('frames.skipped');
+      return true;
+    }
+    captureCurrentFrame(decision.regions);
     return true;
   };
 

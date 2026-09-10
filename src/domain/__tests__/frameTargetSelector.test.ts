@@ -25,12 +25,15 @@ function simulate(
 
 describe('buildFrameTargets', () => {
   it('expands every keystroke by every offset and sorts the result', () => {
-    expect(buildFrameTargets([500, 100], [0])).toEqual([100, 500]);
-    expect(buildFrameTargets([500, 100], [-100, 0])).toEqual([0, 100, 400, 500]);
+    expect(buildFrameTargets([500, 100], [0])).toEqual([
+      { timeMs: 100, keystrokeIndex: 1 },
+      { timeMs: 500, keystrokeIndex: 0 },
+    ]);
+    expect(buildFrameTargets([500, 100], [-100, 0]).map((t) => t.timeMs)).toEqual([0, 100, 400, 500]);
   });
 
-  it('drops non-finite timestamps', () => {
-    expect(buildFrameTargets([100, Number.NaN, Infinity], [0])).toEqual([100]);
+  it('drops non-finite timestamps but keeps the original keystroke indices', () => {
+    expect(buildFrameTargets([Number.NaN, 100, Infinity], [0])).toEqual([{ timeMs: 100, keystrokeIndex: 1 }]);
   });
 });
 
@@ -115,6 +118,23 @@ describe('createFrameTargetSelector', () => {
     expect(stats.captured).toBe(3);
     // 380 以上の最初 = 396、460 以上 = 462、500 以上 = 528
     expect(captured).toEqual([396, 462, 528]);
+  });
+
+  it('tells which keystrokes a captured frame served', () => {
+    const selector = createFrameTargetSelector([300, 340, 380, 900]);
+    expect(selector.wants(400)).toBe(true);
+    expect(selector.markCaptured(400)).toEqual([0, 1, 2]);
+    expect(selector.wants(950)).toBe(true);
+    expect(selector.markCaptured(950)).toEqual([3]);
+  });
+
+  it('reports a keystroke once per frame even when several of its offsets are satisfied', () => {
+    const selector = createFrameTargetSelector([500], {
+      ...DEFAULT_FRAME_TARGET_OPTIONS,
+      offsetsMs: [-100, -50, 0],
+    });
+    expect(selector.markCaptured(520)).toEqual([0]);
+    expect(selector.stats().captured).toBe(3);
   });
 
   it('reports the number of targets it was built with', () => {

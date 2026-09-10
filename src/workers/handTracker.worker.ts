@@ -67,11 +67,38 @@ async function initLandmarker() {
   }
 }
 
+// numHands 等を実行時に切り替える。setOptions はグラフを作り直すため
+// 1 フレームごとではなく解析の開始/終了で呼ぶ。
+async function applyOptions(numHands: number) {
+  if (!landmarker) {
+    self.postMessage({
+      type: 'SET_OPTIONS_RESULT',
+      numHands,
+      ok: false,
+      error: 'HandLandmarker is not initialized.'
+    } satisfies WorkerResponse);
+    return;
+  }
+  try {
+    await landmarker.setOptions({ numHands });
+    self.postMessage({ type: 'SET_OPTIONS_RESULT', numHands, ok: true } satisfies WorkerResponse);
+  } catch (err) {
+    self.postMessage({
+      type: 'SET_OPTIONS_RESULT',
+      numHands,
+      ok: false,
+      error: err instanceof Error ? err.message : String(err)
+    } satisfies WorkerResponse);
+  }
+}
+
 self.onmessage = (e: MessageEvent<WorkerRequest>) => {
   const request = e.data;
 
   if (request.type === 'INIT') {
     initLandmarker();
+  } else if (request.type === 'SET_OPTIONS') {
+    applyOptions(request.numHands);
   } else if (request.type === 'DETECT' && landmarker && request.image) {
     try {
       const detectTimestamp = getMonotonicDetectTimestamp(request.timestamp);

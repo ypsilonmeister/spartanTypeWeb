@@ -112,13 +112,17 @@ export class TypingSession {
     return analyzeKeystrokeAgainstTips(this.layout, keystroke.code, frame.mappedTips);
   }
 
-  public processFrame(
+  /**
+   * 手のランドマークをレイアウト座標の指先へ写す (記録はしない)。
+   * processFrame の座標変換部分。オフライン解析が「このフレームで期待する手が
+   * キーに届いているか」を記録前に判定するために分離してある。
+   */
+  public mapHandsToTips(
     hands: HandData[],
-    timestamp: number,
     canvasWidth: number,
     canvasHeight: number,
     mirror = true
-  ): Point[] {
+  ): { mappedTips: Record<string, Point>; uiPointers: Point[] } {
     const mappedTips: Record<string, Point> = {};
     const uiPointers: Point[] = [];
     const transformWidth = this.calibrationCameraSize?.width || canvasWidth;
@@ -145,6 +149,18 @@ export class TypingSession {
         }
       }
     }
+
+    return { mappedTips, uiPointers };
+  }
+
+  public processFrame(
+    hands: HandData[],
+    timestamp: number,
+    canvasWidth: number,
+    canvasHeight: number,
+    mirror = true
+  ): Point[] {
+    const { mappedTips, uiPointers } = this.mapHandsToTips(hands, canvasWidth, canvasHeight, mirror);
 
     if (this.isRecording) {
       this.frames.push({ timestamp, mappedTips });
