@@ -31,10 +31,14 @@ npm run preview -- --host
 どのシェル (PowerShell / bash / cmd) でも同じコマンドで動く。
 タブレットのコンソールは PC の Chrome から `chrome://inspect` でリモートデバッグして読む。
 
-### PWA キャッシュに注意
+### PWA キャッシュについて
 
-このアプリは Service Worker で precache するため、再ビルドしても端末が古い版を
-表示し続けることがある。計測前に DevTools の Application → Service Workers で
+通常ビルドは Service Worker で precache するため、以前は再ビルド後も端末が古い版を
+表示し続けることがあった。**profile ビルドでは SW を自己破壊型にしてある**
+(`vite.config.ts` の `selfDestroying`) ので、新しい profile ビルドを一度読み込めば
+古い SW と precache は自動で消える (読み込み直後に 1 回自動リロードが入る)。
+
+それでも古い版が出る場合は、DevTools の Application → Service Workers で
 Unregister するか、DevTools の Console で次を実行する:
 
 ```js
@@ -75,13 +79,21 @@ Worker 側にも `[AnalysisProfile] HandLandmarker delegate: ...` が単独で�
 | `frames.callbackTicks` | フレームコールバックが呼ばれた総回数 |
 | `frames.presented` | **総フレーム数** (再生中に新しく提示された distinct なフレーム) |
 | `frames.captured` | そのうち実際にキャプチャして Worker へ送ったフレーム数 |
-| `frames.skippedByBackpressure` | 推論キューが埋まっていて捨てたフレーム数 (既存の間引き) |
+| `frames.skipped` | 打鍵の目標フレームではないので推論しなかったフレーム数 |
+| `frames.waitedForSlot` | 目標フレームなのに推論キューが埋まっていて、video を止めて待った回数 |
 | `frames.inferred` | **実際に MediaPipe 推論が完了したフレーム数** |
 | `frames.workerErrors` | 推論が失敗したフレーム数 |
 | `session.loggedFrames` | 最終的に `TypingSession` に積まれたフレームログ数 |
+| `targets.total` | 打鍵から作った目標フレーム数 (= 打鍵数 × F) |
+| `targets.captured` | フレームを割り当てて推論した目標数。**total と一致していれば全打鍵に自分のフレームが付いている** |
+| `targets.late` | 割り当てたフレームが打鍵から 150ms より遅れていた目標数 |
+| `targets.abandoned` | 500ms 以上過ぎてしまい諦めた目標数 (seek 等の異常時) |
+| `targets.unreached` | 動画が終わるまで到達しなかった目標数 (動画より後の打鍵) |
 
-`presented` と `inferred` の差が、すでに掛かっている間引きの量。
-`skippedByBackpressure / presented` が大きいほど推論がボトルネック。
+解析は「打鍵ごとに keydown 以降の最初のフレーム」だけを推論する
+(`domain/frameTargetSelector.ts`、F は `offlineAnalyzer.ts` の `FRAME_TARGET_OPTIONS`)。
+目標フレームが来たのにキューが埋まっていればフレームを捨てず video を止めて待つので、
+`frames.waitedForSlot` と `wait.pausedMs` が「推論が再生に追いつかなかった量」を表す。
 
 ### timings (時間の内訳)
 
@@ -95,6 +107,7 @@ Worker 側にも `[AnalysisProfile] HandLandmarker delegate: ...` が単独で�
 | `transfer.postMessage` | Worker への転送呼び出し自体 | メイン |
 | `transfer.roundTrip` | postMessage から DETECT_RESULT 受信までの往復 | またぎ |
 | `transfer.queueAndCopy` | `roundTrip - detectMs` = 転送 + Worker のキュー待ち | またぎ |
+| `wait.pausedMs` | 目標フレーム待ちで video を止めていた合計時間 | メイン |
 | `inference.detectForVideo` | **MediaPipe 推論そのもの** | Worker |
 | `postprocess.mapResults` | MediaPipe 結果 → `HandData` 変換 | メイン |
 | `postprocess.processFrame` | **座標変換** (landmark → 画面 → ホモグラフィ) とフレームログ追加 | メイン |
@@ -107,8 +120,8 @@ Worker 側にも `[AnalysisProfile] HandLandmarker delegate: ...` が単独で�
   **並行して**走る。したがって各バケットの合計は `wall` を超えうるし、
   逆に足しても `wall` に届かないこともある (待ち時間が入るため)。
 - `wall` の下限は理屈上 `video.durationSec / analysis.playbackRate`。
-  `wall` がそれに近ければ「再生速度で律速」、大きく超えていれば
-  「デコードか推論が再生に追いつけず video の提示自体が遅れている」。
+  それを超えた分はおおむね `wait.pausedMs` (推論待ちで止めた時間) で説明できるはず。
+  推論が 150ms/frame の端末では `wall ≈ max(duration / 3, 打鍵数 × F × 0.15s)`。
 - `decode.createImageBitmap` は非同期区間なので、他の処理と重なった時間も含む。
   排他的なメインスレッド占有時間は `decode.drawImage` +
   `postprocess.*` + `finalize.*` + `transfer.postMessage` で見る。
