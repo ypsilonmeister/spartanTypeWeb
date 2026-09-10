@@ -4,6 +4,7 @@ import type { SessionData, UnanalyzedSessionData } from '../types/session';
 import { mapMediaPipeResults } from '../utils/mediapipeUtils';
 import type { DetectRequest, WorkerResponse } from './workerProtocol';
 import { createVideoFrameSource, type VideoFrameSource } from './videoFrameSource';
+import { createAnalysisProfiler } from './analysisProfiler';
 
 const ANALYSIS_PLAYBACK_RATE = 3;
 const MAX_PENDING_FRAMES = 2;
@@ -39,6 +40,10 @@ export function runOfflineAnalysis(options: OfflineAnalysisOptions): OfflineAnal
     onProgress,
     onComplete,
   } = options;
+
+  const profiler = createAnalysisProfiler();
+  // ワーカーへ送った時刻を timestamp で引くための表。転送 + キュー待ちの算出に使う。
+  const frameSentAt = new Map<number, number>();
 
   const session = new TypingSession(
     layout,
@@ -97,30 +102,65 @@ export function runOfflineAnalysis(options: OfflineAnalysisOptions): OfflineAnal
     session.loadKeystrokes(unanalyzedData.keystrokes);
 
     if (!cancelled) {
-      onComplete(JSON.parse(session.exportSession()));
+      // exportSession は打鍵 ↔ フレームの対応付け (findNearestFrame) と
+      // 指判定・JSON 化をまとめて行うため、集計コストはここに現れる。
+      const exported = profiler.measure('finalize.exportSession', () => session.exportSession());
+      const parsed = profiler.measure('finalize.parseJson', () => JSON.parse(exported));
+      profiler.count('session.loggedFrames', session.getFrames().length);
+      profiler.report('offline analysis');
+      onComplete(parsed);
+    } else {
+      profiler.report('offline analysis (cancelled)');
     }
+  };
+
+  const recordRoundTrip = (timestamp: number, detectMs: number) => {
+    if (!profiler.enabled) return;
+    const sentAt = frameSentAt.get(timestamp);
+    frameSentAt.delete(timestamp);
+    if (sentAt === undefined) return;
+
+    const roundTripMs = performance.now() - sentAt;
+    profiler.add('transfer.roundTrip', roundTripMs);
+    // 往復時間から推論そのものを引いた残り = ImageBitmap 転送 + ワーカーのキュー待ち。
+    profiler.add('transfer.queueAndCopy', Math.max(0, roundTripMs - detectMs));
   };
 
   const handleWorkerMessage = (event: MessageEvent<WorkerResponse>) => {
     if (event.data.type === 'DETECT_RESULT') {
       pendingFrames--;
-      const { results, timestamp } = event.data;
+      const { results, timestamp, profile } = event.data;
 
       frameCounter++;
       if (frameCounter % 30 === 0) {
         console.log(`[Analysis] Processed ${frameCounter} frames. Queue: ${pendingFrames}`);
       }
 
-      const handsData = results.landmarks.length > 0 ? mapMediaPipeResults(results) : [];
-      session.processFrame(
-        handsData,
-        timestamp,
-        canvas.width,
-        canvas.height,
-        unanalyzedData.isMirrored ?? true
-      );
+      if (profile) {
+        profiler.add('inference.detectForVideo', profile.detectMs);
+        profiler.note('mediapipe.delegate', profile.delegate);
+      }
+      profiler.count('frames.inferred');
+      recordRoundTrip(timestamp, profile?.detectMs ?? 0);
+
+      const handsData = profiler.measure('postprocess.mapResults', () => (
+        results.landmarks.length > 0 ? mapMediaPipeResults(results) : []
+      ));
+      profiler.measure('postprocess.processFrame', () => {
+        session.processFrame(
+          handsData,
+          timestamp,
+          canvas.width,
+          canvas.height,
+          unanalyzedData.isMirrored ?? true
+        );
+      });
     } else if (event.data.type === 'DETECT_ERROR') {
       pendingFrames--;
+      profiler.count('frames.workerErrors');
+      if (typeof event.data.timestamp === 'number') {
+        frameSentAt.delete(event.data.timestamp);
+      }
       console.error('[Analysis] Worker detection frame error:', event.data.error);
     }
   };
@@ -139,13 +179,16 @@ export function runOfflineAnalysis(options: OfflineAnalysisOptions): OfflineAnal
     onFrame: (image, timestamp) => {
       pendingFrames++;
       const request: DetectRequest = { type: 'DETECT', image, timestamp };
-      worker.postMessage(request, [image]);
+      if (profiler.enabled) frameSentAt.set(timestamp, performance.now());
+      profiler.measure('transfer.postMessage', () => worker.postMessage(request, [image]));
     },
     onProgress: (progress) => onProgress({ progress }),
     onLoaded: (width, height, duration) => {
       console.log(
         `[Analysis] Video metadata loaded. Resolution: ${width}x${height}, Duration: ${duration.toFixed(2)}s`
       );
+      profiler.note('video.resolution', `${width}x${height}`);
+      profiler.note('video.durationSec', Number(duration.toFixed(2)));
       onProgress({ status: `Analyzing frames at ${ANALYSIS_PLAYBACK_RATE}x...` });
     },
     onEnded: () => {
@@ -156,8 +199,24 @@ export function runOfflineAnalysis(options: OfflineAnalysisOptions): OfflineAnal
       console.error('[Analysis] Video analysis error:', error);
       onProgress({ status: 'Failed to analyze recorded video.' });
       cleanup();
+      profiler.report('offline analysis (failed)');
     },
+    profiler,
   });
+
+  profiler.note(
+    'session.durationSec',
+    unanalyzedData.recordingDurationMs
+      ? Number((unanalyzedData.recordingDurationMs / 1000).toFixed(2))
+      : 'unknown'
+  );
+  profiler.note('session.keystrokes', unanalyzedData.keystrokes.length);
+  profiler.note('analysis.playbackRate', ANALYSIS_PLAYBACK_RATE);
+  profiler.note('analysis.maxPendingFrames', MAX_PENDING_FRAMES);
+  profiler.note(
+    'video.frameCallback',
+    'requestVideoFrameCallback' in video ? 'requestVideoFrameCallback' : 'requestAnimationFrame'
+  );
 
   frameSource.start();
 
