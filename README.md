@@ -8,6 +8,12 @@ It doesn't just check whether you pressed the *right key* — using webcam-based
 
 Everything runs client-side. There is no backend server: calibration, hand tracking, video analysis, and even the optional phone-as-overhead-camera pairing are all done directly in the browser.
 
+## 🔴 Live Demo
+
+**Try it now, no install needed: https://ypsilonmeister.github.io/spartanTypeWeb/**
+
+All you need is a Chromium-based browser and a webcam.
+
 ---
 
 ## 🚀 Key Features
@@ -117,3 +123,9 @@ Defined in [plugin.json](.claude/plugin.json):
 * `/spartan-custom:e2e-verify` — end-to-end browser verification via a browser subagent.
 * `/spartan-custom:verify-homography` — runs `scripts/verify_homography.cjs` to check the DLT projection math.
 * `/spartan-custom:generate-dictionary` — generates `plantDictionary.ts` practice-word data from a list.
+
+---
+
+## 📄 License
+
+MIT License — see [LICENSE](LICENSE) for details.
