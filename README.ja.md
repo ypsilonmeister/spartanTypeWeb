@@ -8,6 +8,12 @@
 
 すべての処理はクライアントサイドで完結します。バックエンドサーバーは存在せず、キャリブレーション、ハンドトラッキング、動画解析、さらにはオプションのスマホをオーバーヘッドカメラとして使うペアリング機能まで、すべてブラウザ内だけで動作します。
 
+## 🔴 ライブデモ
+
+**インストール不要で今すぐ試せます: https://ypsilonmeister.github.io/spartanTypeWeb/**
+
+必要なのは Chromium 系ブラウザと Web カメラだけです。
+
 ---
 
 ## 🚀 主な機能要件
@@ -117,3 +123,9 @@ src/
 * `/spartan-custom:e2e-verify`（E2Eテストスキル）: `browser_subagent` を使い、ブラウザ上での遷移や動作を全自動検証。
 * `/spartan-custom:verify-homography`（数学エンジン検証）: `scripts/verify_homography.cjs` を実行して DLT 幾何投影計算をチェック。
 * `/spartan-custom:generate-dictionary`（植物分類語彙ジェネレーター）: リストから `plantDictionary.ts` データを自動生成。
+
+---
+
+## 📄 ライセンス
+
+MIT License — 詳細は [LICENSE](LICENSE) をご覧ください。
