@@ -18,6 +18,10 @@ export const translations: Record<Lang, Record<string, string>> = {
     'trainer.recordingHintLine1': 'Type any characters you like.',
     'trainer.recordingHintLine2': 'Typing with correct fingers grows the tree below.',
 
+    'analysis.unknown': 'Unable to judge',
+    'dashboard.judgedKeystrokes': 'Judged keystrokes',
+    'dashboard.heatmapLegend': 'Percentages show the error rate among judged keystrokes. ? indicates the number of unjudged keystrokes.',
+
     'category.plant': '🌱 Plant Names',
     'category.programmer': '💻 Programmer',
     'category.beginner': '🔤 Beginner (A-Z)',
@@ -112,6 +116,10 @@ export const translations: Record<Lang, Record<string, string>> = {
     'trainer.stopBtn': '⏹ 練習終了して解析へ',
     'trainer.recordingHintLine1': '好きな文字を入力してください。',
     'trainer.recordingHintLine2': '正しい指使いで入力すると、下の木が成長します。',
+
+    'analysis.unknown': '判定不能',
+    'dashboard.judgedKeystrokes': '判定できた打鍵',
+    'dashboard.heatmapLegend': 'パーセントは判定できた打鍵の誤り率です。? は判定不能だった打鍵の件数を示します。',
 
     'category.plant': '🌱 植物の名前',
     'category.programmer': '💻 プログラマー',

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { MutableRefObject, RefObject } from 'react';
+import { getKeystrokeVerdict } from '../domain/keystrokeStats';
 import type { TypingSession } from '../domain/typingSession';
 import type { DetectRequest, WorkerResponse } from '../infra/workerProtocol';
 import { mapMediaPipeResults } from '../utils/mediapipeUtils';
 import { translateFingerName } from '../utils/fingerLabels';
-import type { FrameLog } from '../types/session';
 import type { RealtimeFeedbackData } from '../components/trainer/RealtimeFeedback';
 
 interface UseRealtimeFeedbackOptions {
@@ -29,53 +29,80 @@ export function useRealtimeFeedback({
   const [realtimeFeedback, setRealtimeFeedback] = useState<RealtimeFeedbackData | null>(null);
 
   const captureRealtimeFrame = useCallback((keystrokeIndex: number) => {
-    if (analysisMode !== 'realtime' || keystrokeIndex < 0 || !isWorkerReady || !worker) return;
+    if (analysisMode !== 'realtime' || keystrokeIndex < 0) return;
+
+    const session = engineRef.current;
+    const keystroke = session?.getKeystrokeByIndex(keystrokeIndex);
+    if (!session || !keystroke) return;
 
     const video = videoRef.current;
-    if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
+    if (!isWorkerReady || !worker || !video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      setRealtimeFeedback({ key: keystroke.key, verdict: 'unknown' });
+      return;
+    }
 
     createImageBitmap(video).then(bitmap => {
+      if (engineRef.current !== session || session.getKeystrokeByIndex(keystrokeIndex) !== keystroke || !session.isSessionActive) {
+        bitmap.close();
+        return;
+      }
+
       const timestamp = performance.now() - sessionStartRef.current;
       const request: DetectRequest = { type: 'DETECT', image: bitmap, timestamp, keystrokeIndex };
-      worker.postMessage(request, [bitmap]);
-    }).catch(err => console.error('Realtime frame capture failed:', err));
-  }, [analysisMode, isWorkerReady, sessionStartRef, videoRef, worker]);
+      try {
+        worker.postMessage(request, [bitmap]);
+      } catch (err) {
+        bitmap.close();
+        throw err;
+      }
+    }).catch(err => {
+      console.error('Realtime frame capture failed:', err);
+      if (engineRef.current === session && session.isSessionActive
+        && session.getKeystrokeByIndex(keystrokeIndex) === keystroke
+        && !session.getKeystrokeByIndex(keystrokeIndex + 1)) {
+        setRealtimeFeedback({ key: keystroke.key, verdict: 'unknown' });
+      }
+    });
+  }, [analysisMode, engineRef, isWorkerReady, sessionStartRef, videoRef, worker]);
 
   useEffect(() => {
     if (analysisMode !== 'realtime' || !worker || !isWorkerReady) return;
 
     const handleWorkerMessage = (e: MessageEvent<WorkerResponse>) => {
-      if (e.data.type !== 'DETECT_RESULT') return;
+      const message = e.data;
+      if (message.type !== 'DETECT_RESULT' && message.type !== 'DETECT_ERROR') return;
 
-      const { results, timestamp, keystrokeIndex } = e.data;
       const session = engineRef.current;
-      if (!session) return;
+      if (!session?.isSessionActive) return;
 
-      const handsData = mapMediaPipeResults(results);
-      const video = videoRef.current;
-      const videoWidth = video?.videoWidth || 640;
-      const videoHeight = video?.videoHeight || 480;
-      session.processFrame(handsData, timestamp, videoWidth, videoHeight, isMirrored);
-
+      const { keystrokeIndex } = message;
       const match = typeof keystrokeIndex === 'number'
         ? session.getKeystrokeByIndex(keystrokeIndex)
         : null;
-
       if (!match) return;
 
-      const framesList = session.getFrames();
-      const addedFrame: FrameLog | null = framesList.length > 0
-        ? framesList[framesList.length - 1]
-        : null;
+      if (message.type === 'DETECT_ERROR') {
+        setRealtimeFeedback({ key: match.key, verdict: 'unknown' });
+        return;
+      }
 
-      if (!addedFrame) return;
+      const handsData = mapMediaPipeResults(message.results);
+      const video = videoRef.current;
+      const videoWidth = video?.videoWidth || 640;
+      const videoHeight = video?.videoHeight || 480;
+      session.processFrame(handsData, message.timestamp, videoWidth, videoHeight, isMirrored);
 
-      const analysis = session.analyzeKeystrokeRealtime(match, addedFrame);
-      if (!analysis) return;
+      const addedFrame = session.getFrames().at(-1);
+      const analysis = addedFrame ? session.analyzeKeystrokeRealtime(match, addedFrame) : null;
+      const verdict = getKeystrokeVerdict(analysis?.isCorrectFinger);
+      if (!analysis || verdict === 'unknown') {
+        setRealtimeFeedback({ key: match.key, verdict: 'unknown' });
+        return;
+      }
 
       setRealtimeFeedback({
         key: match.key,
-        isCorrect: !!analysis.isCorrectFinger,
+        verdict,
         expected: translateFingerName(analysis.expectedFinger),
         got: translateFingerName(analysis.predictedFinger)
       });

@@ -156,6 +156,12 @@
   color: var(--color-error);
 }
 
+.trainer-realtime-feedback.is-unknown {
+  background: rgba(170, 170, 180, 0.1);
+  border: 1px solid rgba(170, 170, 180, 0.3);
+  color: #dedee5;
+}
+
 .trainer-keyboard-wrapper {
   order: 2;
   position: relative;

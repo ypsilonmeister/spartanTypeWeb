@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react';
 import type { KeyboardLayout } from '../../types/kle';
 import type { SessionData, UnanalyzedSessionData } from '../../types/session';
 import { buildKeystrokeTreeView } from '../../domain/keystrokeTree';
+import { summarizeKeystrokes } from '../../domain/keystrokeStats';
+import { useLanguage } from '../../hooks/useLanguage';
 import { ScoreSummary } from './ScoreSummary';
 import { HabitAnalyzer } from './HabitAnalyzer';
 import { KeyboardHeatmap } from './KeyboardHeatmap';
@@ -27,6 +29,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   onAnalysisComplete,
   onSessionLoaded,
 }) => {
+  const { t } = useLanguage();
   const [error, setError] = useState<string | null>(null);
   const sessionData = initialAnalyzedData || null;
   const unanalyzedData = initialUnanalyzedData || null;
@@ -36,6 +39,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   // structure the log does have: hand ➔ finger ➔ key.
   const fingerTree = useMemo(
     () => (sessionData ? buildKeystrokeTreeView(sessionData.keystrokes, 'Fingers') : null),
+    [sessionData]
+  );
+
+  const stats = useMemo(
+    () => (sessionData ? summarizeKeystrokes(sessionData.keystrokes) : null),
     [sessionData]
   );
 
@@ -138,13 +146,13 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         />
       )}
 
-      {sessionData && (
+      {stats && (
         <div className="dashboard-content">
           <div className="dashboard-main-grid">
             {/* Left side: scores and habits */}
             <div className="dashboard-summary-column">
-              <ScoreSummary keystrokes={sessionData.keystrokes} />
-              <HabitAnalyzer keystrokes={sessionData.keystrokes} />
+              <ScoreSummary stats={stats} />
+              <HabitAnalyzer wrongKeystrokes={stats.wrongKeystrokes} />
             </div>
             
             {/* Right side: generated tree */}
@@ -160,9 +168,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
           <div className="heatmap-section">
             <h3>Error Heatmap</h3>
-            <p className="subtitle">Keys colored red indicate a higher frequency of incorrect finger usage.</p>
+            <p className="subtitle">{t('dashboard.heatmapLegend')}</p>
             <div className="heatmap-scroll">
-              <KeyboardHeatmap layout={layout} keystrokes={sessionData.keystrokes} />
+              <KeyboardHeatmap layout={layout} byCode={stats.byCode} />
             </div>
           </div>
         </div>

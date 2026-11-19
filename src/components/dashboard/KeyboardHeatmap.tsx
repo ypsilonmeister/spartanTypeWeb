@@ -1,37 +1,24 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import type { KeyboardLayout } from '../../types/kle';
-import type { KeystrokeLog } from '../../types/session';
+import type { KeystrokeStats } from '../../domain/keystrokeStats';
+import { useLanguage } from '../../hooks/useLanguage';
 import { matchKLEKey } from '../../utils/keyMap';
 import '../../styles/keyboard.css';
 
 interface KeyboardHeatmapProps {
   layout: KeyboardLayout;
-  keystrokes: KeystrokeLog[];
+  byCode: KeystrokeStats['byCode'];
   unitSize?: number;
   gap?: number;
 }
 
 export const KeyboardHeatmap: React.FC<KeyboardHeatmapProps> = ({
   layout,
-  keystrokes,
+  byCode,
   unitSize = 44,
   gap = 6
 }) => {
-  const heatmapData = useMemo(() => {
-    // code -> { total, errors }
-    const map = new Map<string, { total: number, errors: number }>();
-    
-    keystrokes.forEach(ks => {
-      const current = map.get(ks.code) || { total: 0, errors: 0 };
-      current.total++;
-      if (!ks.isCorrectFinger) {
-        current.errors++;
-      }
-      map.set(ks.code, current);
-    });
-
-    return map;
-  }, [keystrokes]);
+  const { t } = useLanguage();
 
   const containerStyle: React.CSSProperties = {
     width: layout.width * unitSize,
@@ -57,22 +44,22 @@ export const KeyboardHeatmap: React.FC<KeyboardHeatmapProps> = ({
         const width = key.w * unitSize - gap;
         const height = key.h * unitSize - gap;
         
-        // Find if this key has data. 
-        let errorRate = 0;
-        let total = 0;
-        
-        for (const [code, data] of heatmapData.entries()) {
+        let judged = 0;
+        let errors = 0;
+        let unknown = 0;
+
+        for (const [code, counts] of byCode) {
           if (matchKLEKey(key.label, code)) {
-            total += data.total;
-            errorRate += data.errors;
+            judged += counts.correct + counts.wrong;
+            errors += counts.wrong;
+            unknown += counts.unknown;
           }
         }
-        
-        if (total > 0) {
-          errorRate = errorRate / total;
-        }
 
-        const bg = total > 0 ? getHeatColor(errorRate) : 'rgba(40, 40, 45, 0.4)';
+        const errorRate = judged > 0 ? errors / judged : 0;
+        const bg = judged > 0
+          ? getHeatColor(errorRate)
+          : unknown > 0 ? '#55555f' : 'rgba(40, 40, 45, 0.4)';
 
         return (
           <div
@@ -85,13 +72,18 @@ export const KeyboardHeatmap: React.FC<KeyboardHeatmapProps> = ({
               width: `${width}px`,
               height: `${height}px`,
               backgroundColor: bg,
-              border: total > 0 && errorRate === 0 ? '1px solid #00ff00' : (errorRate > 0 ? '1px solid #ff4444' : '1px solid rgba(255,255,255,0.1)'),
+              border: judged > 0 && errorRate === 0 ? '1px solid #00ff00' : (errorRate > 0 ? '1px solid #ff4444' : '1px solid rgba(255,255,255,0.1)'),
             }}
           >
             <div className="heatmap-key-label">{key.label}</div>
-            {total > 0 && (
+            {judged > 0 && (
               <div className={`heatmap-key-stat${errorRate > 0 ? ' is-error' : ' is-clean'}`}>
                 {Math.round(errorRate * 100)}%
+              </div>
+            )}
+            {unknown > 0 && (
+              <div className="heatmap-key-stat is-unknown" title={t('analysis.unknown')}>
+                ?{unknown}
               </div>
             )}
           </div>

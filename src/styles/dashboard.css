@@ -269,6 +269,13 @@
   color: #00ff00;
 }
 
+.heatmap-key-stat.is-unknown {
+  color: #dedee5;
+  background: #55555f;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
 .growth-tree-panel {
   background: rgba(20, 20, 30, 0.4);
   backdrop-filter: blur(8px);
