@@ -1,5 +1,9 @@
 import { CameraSourceSelector } from '../camera/CameraSourceSelector';
 import { useLanguage } from '../../hooks/useLanguage';
+import {
+  getRecordingUnavailableTranslationKey,
+  type RecordingCapability,
+} from '../../utils/mediaRecording';
 import type { CameraSource, RemoteStatus } from '../../hooks/useCameraSource';
 import type { PracticeCategory } from '../../types/practice';
 
@@ -18,6 +22,7 @@ interface TrainerControlsProps {
   analysisMode: 'offline' | 'realtime';
   onAnalysisModeChange: (mode: 'offline' | 'realtime') => void;
   isWorkerReady: boolean;
+  recordingCapability: RecordingCapability;
   onToggleRecording: () => void;
 }
 
@@ -36,9 +41,12 @@ export const TrainerControls = ({
   analysisMode,
   onAnalysisModeChange,
   isWorkerReady,
+  recordingCapability,
   onToggleRecording,
 }: TrainerControlsProps) => {
   const { t } = useLanguage();
+  const isOfflineUnavailable =
+    analysisMode === 'offline' && !isRecording && !recordingCapability.available;
 
   return (
   <div className="trainer-control-panel">
@@ -104,9 +112,15 @@ export const TrainerControls = ({
       )}
     </div>
 
+    {isOfflineUnavailable && (
+      <div className="trainer-recording-unavailable" role="status">
+        {t(getRecordingUnavailableTranslationKey(recordingCapability.reason))}
+      </div>
+    )}
+
     <button
       onClick={onToggleRecording}
-      disabled={analysisMode === 'realtime' && !isWorkerReady}
+      disabled={(analysisMode === 'realtime' && !isWorkerReady) || isOfflineUnavailable}
       className={`trainer-record-btn${isRecording ? ' is-recording' : ''}`}
     >
       {isRecording ? t('trainer.stopBtn') : t('trainer.startBtn')}

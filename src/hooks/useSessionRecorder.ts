@@ -61,6 +61,19 @@ export function useSessionRecorder({
     if (!video || !canvas) {
       throw new Error('Recording video or canvas is not ready.');
     }
+    if (typeof MediaRecorder === 'undefined') {
+      throw new Error('MediaRecorder is not supported in this browser.');
+    }
+    if (typeof canvas.captureStream !== 'function') {
+      throw new Error('canvas.captureStream is not supported in this browser.');
+    }
+
+    const mimeType = typeof MediaRecorder.isTypeSupported === 'function'
+      ? selectSupportedRecordingMimeType(MediaRecorder.isTypeSupported.bind(MediaRecorder))
+      : undefined;
+    if (!mimeType) {
+      throw new Error('No supported video recording MIME type found.');
+    }
 
     recordedChunksRef.current = [];
 
@@ -77,46 +90,49 @@ export function useSessionRecorder({
       throw new Error('Could not create recording canvas context.');
     }
 
-    // rAF は表示リフレッシュ (60Hz 等) で回るが、描画は録画レートに間引く。
-    // captureStream(fps) はキャンバスが変化したときだけフレームを取るので、
-    // 描画しなければエンコードもされない = 録画中のタイピングを邪魔しない。
-    let lastDrawAt = -Infinity;
-    const drawFrame = (now: number) => {
-      if (
-        now - lastDrawAt >= RECORDING_FRAME_INTERVAL_MS
-        && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
-      ) {
-        ctx.drawImage(video, 0, 0, recordingSize.width, recordingSize.height);
-        lastDrawAt = now;
-      }
-      recordingAnimationFrameRef.current = requestAnimationFrame(drawFrame);
-    };
-    drawFrame(performance.now());
+    try {
+      // rAF は表示リフレッシュ (60Hz 等) で回るが、描画は録画レートに間引く。
+      // captureStream(fps) はキャンバスが変化したときだけフレームを取るので、
+      // 描画しなければエンコードもされない = 録画中のタイピングを邪魔しない。
+      let lastDrawAt = -Infinity;
+      const drawFrame = (now: number) => {
+        if (
+          now - lastDrawAt >= RECORDING_FRAME_INTERVAL_MS
+          && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+        ) {
+          ctx.drawImage(video, 0, 0, recordingSize.width, recordingSize.height);
+          lastDrawAt = now;
+        }
+        recordingAnimationFrameRef.current = requestAnimationFrame(drawFrame);
+      };
+      drawFrame(performance.now());
 
-    const recordingStream = canvas.captureStream(RECORDING_FPS);
-    recordingStreamRef.current = recordingStream;
+      const recordingStream = canvas.captureStream(RECORDING_FPS);
+      recordingStreamRef.current = recordingStream;
 
-    const mimeType = typeof MediaRecorder.isTypeSupported === 'function'
-      ? selectSupportedRecordingMimeType(MediaRecorder.isTypeSupported.bind(MediaRecorder))
-      : undefined;
-    const options: MediaRecorderOptions = {
-      videoBitsPerSecond: RECORDING_VIDEO_BITS_PER_SECOND
-    };
-    if (mimeType) options.mimeType = mimeType;
+      const options: MediaRecorderOptions = {
+        videoBitsPerSecond: RECORDING_VIDEO_BITS_PER_SECOND,
+        mimeType,
+      };
 
-    const recorder = new MediaRecorder(recordingStream, options);
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) recordedChunksRef.current.push(event.data);
-    };
-    recorder.start(1000);
-    mediaRecorderRef.current = recorder;
+      const recorder = new MediaRecorder(recordingStream, options);
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) recordedChunksRef.current.push(event.data);
+      };
+      recorder.start(1000);
+      mediaRecorderRef.current = recorder;
 
-    console.log(
-      `[Recording] Capturing ${sourceWidth}x${sourceHeight} as ` +
-      `${recordingSize.width}x${recordingSize.height} at ${RECORDING_FPS}fps ` +
-      `using ${recorder.mimeType || 'the browser default format'}.`
-    );
-  }, [calibrationCameraSize, videoRef]);
+      console.log(
+        `[Recording] Capturing ${sourceWidth}x${sourceHeight} as ` +
+        `${recordingSize.width}x${recordingSize.height} at ${RECORDING_FPS}fps ` +
+        `using ${recorder.mimeType || mimeType}.`
+      );
+    } catch (err) {
+      stopRecordingCapture();
+      mediaRecorderRef.current = null;
+      throw err;
+    }
+  }, [calibrationCameraSize, stopRecordingCapture, videoRef]);
 
   const stopOfflineRecording = useCallback((): Promise<Blob | null> => (
     new Promise((resolve) => {

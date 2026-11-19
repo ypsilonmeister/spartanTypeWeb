@@ -138,7 +138,13 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         </div>
       )}
 
-      {!sessionData && unanalyzedData && !error && (
+      {!sessionData && unanalyzedData && !unanalyzedData.blob && !error && (
+        <div className="empty-state no-video-state" role="status">
+          <p>{t('dashboard.noVideoCannotJudge')}</p>
+        </div>
+      )}
+
+      {!sessionData && unanalyzedData && unanalyzedData.blob && !error && (
         <AnalysisPhase
           unanalyzedData={unanalyzedData}
           layout={layout}

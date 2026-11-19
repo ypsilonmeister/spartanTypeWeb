@@ -320,6 +320,14 @@
   margin-top: 2px;
 }
 
+.trainer-recording-unavailable {
+  width: 100%;
+  font-size: 0.78rem;
+  color: var(--color-warning);
+  text-align: center;
+  line-height: 1.4;
+}
+
 /* ---- Record Toggle Button ---- */
 .trainer-record-btn {
   width: 100%;

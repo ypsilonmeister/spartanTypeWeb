@@ -10,6 +10,14 @@ import { useWorker } from '../../hooks/useWorker';
 import { usePracticeDrill } from '../../hooks/usePracticeDrill';
 import { useSessionRecorder } from '../../hooks/useSessionRecorder';
 import { useRealtimeFeedback } from '../../hooks/useRealtimeFeedback';
+import { useLanguage } from '../../hooks/useLanguage';
+import { useToast } from '../../hooks/useToast';
+import {
+  detectRecordingCapability,
+  getRecordingUnavailableTranslationKey,
+  startOfflineSession,
+} from '../../utils/mediaRecording';
+import { ToastContainer } from '../common/ToastContainer';
 import { PracticeWordDisplay } from './PracticeWordDisplay';
 import { TrainerControls } from './TrainerControls';
 import { GrowthTreeCanvas } from '../tree/GrowthTreeCanvas';
@@ -61,6 +69,9 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
     typeof window === 'undefined' ? 800 : window.innerHeight
   ));
 
+  const { t } = useLanguage();
+  const { toasts, showToast } = useToast();
+
   // MediaRecorder refs for post-session analysis
   const sessionStartRef = useRef(0);
   const {
@@ -70,6 +81,10 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
     stopOfflineRecording,
     stopRecordingCapture,
   } = useSessionRecorder({ videoRef, calibrationCameraSize });
+  const recordingCapability = useMemo(
+    () => detectRecordingCapability(stream),
+    [stream]
+  );
 
   // Analysis mode: offline (record and analyze) vs realtime (capture at keypress)
   const [analysisMode, setAnalysisMode] = useState<'offline' | 'realtime'>(() => {
@@ -233,14 +248,23 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
       
     } else {
       setRealtimeFeedback(null);
-      
-      if (analysisMode === 'offline' && stream) {
-        try {
-          startOfflineRecording();
-        } catch (e) {
-          console.error("MediaRecorder start failed:", e);
-          stopRecordingCapture();
-        }
+
+      if (analysisMode === 'offline') {
+        startOfflineSession({
+          capability: recordingCapability,
+          startRecording: startOfflineRecording,
+          cleanupRecording: stopRecordingCapture,
+          startTypingSession: () => {
+            sessionStartRef.current = performance.now();
+            engineRef.current!.startSession();
+            setIsRecording(true);
+            resetProgress();
+          },
+          formatUnavailableReason: (reason) => t(getRecordingUnavailableTranslationKey(reason)),
+          formatStartError: (rawReason) => t('trainer.recordingStartFailed', { reason: rawReason }),
+          onError: (message) => showToast(message, 'error', 5000),
+        });
+        return;
       }
 
       sessionStartRef.current = performance.now();
@@ -306,6 +330,7 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
           analysisMode={analysisMode}
           onAnalysisModeChange={handleSetAnalysisMode}
           isWorkerReady={isWorkerReady}
+          recordingCapability={recordingCapability}
           onToggleRecording={toggleRecording}
         />
 
@@ -317,6 +342,7 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
           caption="Live Typing Tree"
         />
       </div>
+      <ToastContainer toasts={toasts} />
     </div>
   );
 };
