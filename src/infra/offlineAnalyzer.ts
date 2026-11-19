@@ -6,12 +6,13 @@ import {
 } from '../domain/frameTargetSelector';
 import {
   cropRectForHand,
+  DEFAULT_OTHER_HAND_FALLBACK,
   expectedHandForKeystroke,
+  needsOtherHandInference,
   otherHand,
   uncropHands,
   type CropRect,
 } from '../domain/frameCrop';
-import { analyzeKeystrokeAgainstTips } from '../domain/fingerAnalysis';
 import type { KeyboardLayout } from '../types/kle';
 import type { HandData, HandSide, SessionData, UnanalyzedSessionData } from '../types/session';
 import { mapMediaPipeResults } from '../utils/mediapipeUtils';
@@ -41,17 +42,18 @@ const FRAME_TARGET_OPTIONS: FrameTargetSelectorOptions = DEFAULT_FRAME_TARGET_OP
  *
  * 打鍵から期待指 (= 期待する手) が分かるので、その手が写っている側だけを切り出して
  * numHands: 1 で推論すれば landmark モデルを 2 回走らせずに済む (推論 −35〜40%)。
- * 期待する手のどの指もキーに届いていなければ (逆の手で打った等) もう片方の側も
- * 推論して両手ぶん合成し、「手が違う」判定を残す。
+ * 期待指がキーの上 (0.5U 以内) で最近傍になっていなければ (逆の手で打った・別の指で
+ * 打った等) もう片方の側も推論して両手ぶん合成し、両手を見たうえで判定する。
+ * 期待する手のどこかの指が近くにいるだけでは確定させない (Issue #21)。
  */
 const EXPECTED_HAND_CROP = {
   enabled: true,
   /** 切り出し幅 / フレーム幅。中央線を 10% 越えて、中央付近のキーで手が境界にまたがるのを避ける。 */
   widthRatio: 0.6,
-  /** 期待する手がキーに届いていないとき、もう片方の手も推論して合成する。 */
+  /** 期待指がキーの上にいないとき、もう片方の手も推論して合成する。 */
   fallbackToOtherHand: true,
-  /** fingerAnalysis と同じ 1.5U。これを超えたら「期待する手では打っていない」。 */
-  missDistanceU: 1.5,
+  /** もう片方の手も推論するかのしきい値 (frameCrop.needsOtherHandInference)。 */
+  otherHandFallback: DEFAULT_OTHER_HAND_FALLBACK,
   /** 通常時 (realtime feedback と共有) の numHands。解析後に戻す。 */
   defaultNumHands: 2,
   /** SET_OPTIONS の応答をこれだけ待って来なければ切り出しを諦めて全体推論に落ちる。 */
@@ -249,17 +251,15 @@ export function runOfflineAnalysis(options: OfflineAnalysisOptions): OfflineAnal
   };
 
   /**
-   * 期待する手の検出結果で、このフレームが担う打鍵のどれかがキーに届いていないか。
-   * 届いていなければ逆の手で打った可能性があるので、もう片方の側も推論する。
+   * 期待する手の検出結果だけでは、このフレームが担う打鍵のどれかの判定を確定できないか。
+   * 確定できなければ逆の手で打った可能性があるので、もう片方の側も推論する。
    */
   const hasExpectedHandMiss = (hands: HandData[], keystrokeIndices: number[]): boolean => {
     const { mappedTips } = session.mapHandsToTips(hands, canvas.width, canvas.height, mirror);
     return keystrokeIndices.some((index) => {
       const keystroke = unanalyzedData.keystrokes[index];
       if (!keystroke) return false;
-      const analysis = analyzeKeystrokeAgainstTips(layout, keystroke.code, mappedTips);
-      // レイアウトにキーが無ければ判定不能 = フォールバックしても意味がない
-      return analysis !== null && analysis.distanceU > EXPECTED_HAND_CROP.missDistanceU;
+      return needsOtherHandInference(layout, keystroke.code, mappedTips, EXPECTED_HAND_CROP.otherHandFallback);
     });
   };
 
