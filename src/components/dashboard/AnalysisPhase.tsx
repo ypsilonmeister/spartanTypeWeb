@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { UnanalyzedSessionData, SessionData } from '../../types/session';
 import { useWorker } from '../../hooks/useWorker';
+import { useLanguage } from '../../hooks/useLanguage';
 import type { KeyboardLayout } from '../../types/kle';
 import { runOfflineAnalysis } from '../../infra/offlineAnalyzer';
 
@@ -11,6 +12,7 @@ interface AnalysisPhaseProps {
 }
 
 export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, layout, onAnalysisComplete }) => {
+  const { t } = useLanguage();
   const { worker, isWorkerReady, workerError } = useWorker();
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState<string>('Preparing video for analysis...');
@@ -20,6 +22,7 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
   const isAnalyzing = useRef(false);
 
   useEffect(() => {
+    if (!unanalyzedData.blob) return;
     if (!isWorkerReady || !worker || isAnalyzing.current) return;
 
     const video = videoRef.current;
@@ -47,6 +50,15 @@ export const AnalysisPhase: React.FC<AnalysisPhaseProps> = ({ unanalyzedData, la
       run.cancel();
     };
   }, [isWorkerReady, worker, unanalyzedData, layout, onAnalysisComplete]);
+
+  if (!unanalyzedData.blob) {
+    return (
+      <div className="analysis-phase">
+        <h2 className="analysis-title">Post-Session Analysis</h2>
+        <p className="analysis-status" role="status">{t('dashboard.noVideoCannotJudge')}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="analysis-phase">

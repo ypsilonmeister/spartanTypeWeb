@@ -1,11 +1,16 @@
 import { CameraSourceSelector } from '../camera/CameraSourceSelector';
 import { useLanguage } from '../../hooks/useLanguage';
+import {
+  getRecordingUnavailableTranslationKey,
+  type RecordingCapability,
+} from '../../utils/mediaRecording';
 import type { CameraSource, RemoteStatus } from '../../hooks/useCameraSource';
 import type { PracticeCategory } from '../../types/practice';
 
 interface TrainerControlsProps {
   hasCalibration: boolean;
   isRecording: boolean;
+  isStartingRecording?: boolean;
   cameraSource: CameraSource;
   remoteStatus: RemoteStatus;
   offer: string | null;
@@ -18,12 +23,14 @@ interface TrainerControlsProps {
   analysisMode: 'offline' | 'realtime';
   onAnalysisModeChange: (mode: 'offline' | 'realtime') => void;
   isWorkerReady: boolean;
+  recordingCapability: RecordingCapability;
   onToggleRecording: () => void;
 }
 
 export const TrainerControls = ({
   hasCalibration,
   isRecording,
+  isStartingRecording = false,
   cameraSource,
   remoteStatus,
   offer,
@@ -36,9 +43,13 @@ export const TrainerControls = ({
   analysisMode,
   onAnalysisModeChange,
   isWorkerReady,
+  recordingCapability,
   onToggleRecording,
 }: TrainerControlsProps) => {
   const { t } = useLanguage();
+  const isControlLocked = isRecording || isStartingRecording;
+  const isOfflineUnavailable =
+    analysisMode === 'offline' && !isControlLocked && !recordingCapability.available;
 
   return (
   <div className="trainer-control-panel">
@@ -48,7 +59,7 @@ export const TrainerControls = ({
       </div>
     )}
 
-    {!isRecording && (
+    {!isControlLocked && (
       <CameraSourceSelector
         source={cameraSource}
         onSourceChange={onCameraSourceChange}
@@ -67,7 +78,7 @@ export const TrainerControls = ({
         {(Object.keys(practiceCategoryLabels) as PracticeCategory[]).map(cat => (
           <button
             key={cat}
-            disabled={isRecording}
+            disabled={isControlLocked}
             onClick={() => onPracticeCategoryChange(cat)}
             className={`trainer-category-btn${practiceCategory === cat ? ' is-active' : ''}`}
           >
@@ -83,14 +94,14 @@ export const TrainerControls = ({
       </label>
       <div className="trainer-mode-toggle">
         <button
-          disabled={isRecording}
+          disabled={isControlLocked}
           onClick={() => onAnalysisModeChange('offline')}
           className={`trainer-mode-btn${analysisMode === 'offline' ? ' is-active' : ''}`}
         >
           {t('trainer.modeOffline')}
         </button>
         <button
-          disabled={isRecording}
+          disabled={isControlLocked}
           onClick={() => onAnalysisModeChange('realtime')}
           className={`trainer-mode-btn${analysisMode === 'realtime' ? ' is-active' : ''}`}
         >
@@ -104,9 +115,15 @@ export const TrainerControls = ({
       )}
     </div>
 
+    {isOfflineUnavailable && (
+      <div className="trainer-recording-unavailable" role="status">
+        {t(getRecordingUnavailableTranslationKey(recordingCapability.reason))}
+      </div>
+    )}
+
     <button
       onClick={onToggleRecording}
-      disabled={analysisMode === 'realtime' && !isWorkerReady}
+      disabled={(analysisMode === 'realtime' && !isWorkerReady) || isOfflineUnavailable || isStartingRecording}
       className={`trainer-record-btn${isRecording ? ' is-recording' : ''}`}
     >
       {isRecording ? t('trainer.stopBtn') : t('trainer.startBtn')}
