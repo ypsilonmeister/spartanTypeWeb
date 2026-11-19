@@ -74,6 +74,14 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
 
   // MediaRecorder refs for post-session analysis
   const sessionStartRef = useRef(0);
+  const isMountedRef = useRef(true);
+  const isStartingRecordingRef = useRef(false);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
   const {
     recordingCanvasRef,
     recordingCameraSizeRef,
@@ -250,20 +258,41 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
       setRealtimeFeedback(null);
 
       if (analysisMode === 'offline') {
-        startOfflineSession({
-          capability: recordingCapability,
-          startRecording: startOfflineRecording,
-          cleanupRecording: stopRecordingCapture,
-          startTypingSession: () => {
-            sessionStartRef.current = performance.now();
-            engineRef.current!.startSession();
-            setIsRecording(true);
-            resetProgress();
-          },
-          formatUnavailableReason: (reason) => t(getRecordingUnavailableTranslationKey(reason)),
-          formatStartError: (rawReason) => t('trainer.recordingStartFailed', { reason: rawReason }),
-          onError: (message) => showToast(message, 'error', 5000),
-        });
+        if (isStartingRecordingRef.current) return;
+        isStartingRecordingRef.current = true;
+        try {
+          await startOfflineSession({
+            capability: recordingCapability,
+            startRecording: () =>
+              startOfflineRecording((err) => {
+                if (!isMountedRef.current) return;
+                engineRef.current?.stopSession();
+                setIsRecording(false);
+                showToast(
+                  t('trainer.recordingFailed', { reason: err.message }),
+                  'error',
+                  5000
+                );
+              }),
+            cleanupRecording: stopRecordingCapture,
+            startTypingSession: () => {
+              if (!isMountedRef.current) return;
+              sessionStartRef.current = performance.now();
+              engineRef.current!.startSession();
+              setIsRecording(true);
+              resetProgress();
+            },
+            formatUnavailableReason: (reason) => t(getRecordingUnavailableTranslationKey(reason)),
+            formatStartError: (rawReason) => t('trainer.recordingStartFailed', { reason: rawReason }),
+            onError: (message) => {
+              if (isMountedRef.current) {
+                showToast(message, 'error', 5000);
+              }
+            },
+          });
+        } finally {
+          isStartingRecordingRef.current = false;
+        }
         return;
       }
 

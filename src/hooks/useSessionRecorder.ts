@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { CalibrationCameraSize } from '../types/calibration';
-import { selectSupportedRecordingMimeType } from '../utils/mediaRecording';
+import {
+  selectSupportedRecordingMimeType,
+  startMediaRecorderWithConfirmation,
+} from '../utils/mediaRecording';
 
 const RECORDING_MAX_WIDTH = 960;
 /**
@@ -55,84 +58,94 @@ export function useSessionRecorder({
 
   useEffect(() => stopRecordingCapture, [stopRecordingCapture]);
 
-  const startOfflineRecording = useCallback(() => {
-    const video = videoRef.current;
-    const canvas = recordingCanvasRef.current;
-    if (!video || !canvas) {
-      throw new Error('Recording video or canvas is not ready.');
-    }
-    if (typeof MediaRecorder === 'undefined') {
-      throw new Error('MediaRecorder is not supported in this browser.');
-    }
-    if (typeof canvas.captureStream !== 'function') {
-      throw new Error('canvas.captureStream is not supported in this browser.');
-    }
+  const startOfflineRecording = useCallback(
+    async (onAsyncError?: (error: Error) => void): Promise<void> => {
+      const video = videoRef.current;
+      const canvas = recordingCanvasRef.current;
+      if (!video || !canvas) {
+        throw new Error('Recording video or canvas is not ready.');
+      }
+      if (typeof MediaRecorder === 'undefined') {
+        throw new Error('MediaRecorder is not supported in this browser.');
+      }
+      if (typeof canvas.captureStream !== 'function') {
+        throw new Error('canvas.captureStream is not supported in this browser.');
+      }
 
-    const mimeType = typeof MediaRecorder.isTypeSupported === 'function'
-      ? selectSupportedRecordingMimeType(MediaRecorder.isTypeSupported.bind(MediaRecorder))
-      : undefined;
-    if (!mimeType) {
-      throw new Error('No supported video recording MIME type found.');
-    }
+      const mimeType = typeof MediaRecorder.isTypeSupported === 'function'
+        ? selectSupportedRecordingMimeType(MediaRecorder.isTypeSupported.bind(MediaRecorder))
+        : undefined;
 
-    recordedChunksRef.current = [];
+      recordedChunksRef.current = [];
 
-    const sourceWidth = video.videoWidth || 640;
-    const sourceHeight = video.videoHeight || 480;
-    recordingCameraSizeRef.current = calibrationCameraSize ?? { width: sourceWidth, height: sourceHeight };
+      const sourceWidth = video.videoWidth || 640;
+      const sourceHeight = video.videoHeight || 480;
+      recordingCameraSizeRef.current = calibrationCameraSize ?? { width: sourceWidth, height: sourceHeight };
 
-    const recordingSize = getRecordingSize(sourceWidth, sourceHeight);
-    canvas.width = recordingSize.width;
-    canvas.height = recordingSize.height;
+      const recordingSize = getRecordingSize(sourceWidth, sourceHeight);
+      canvas.width = recordingSize.width;
+      canvas.height = recordingSize.height;
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      throw new Error('Could not create recording canvas context.');
-    }
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        throw new Error('Could not create recording canvas context.');
+      }
 
-    try {
-      // rAF は表示リフレッシュ (60Hz 等) で回るが、描画は録画レートに間引く。
-      // captureStream(fps) はキャンバスが変化したときだけフレームを取るので、
-      // 描画しなければエンコードもされない = 録画中のタイピングを邪魔しない。
-      let lastDrawAt = -Infinity;
-      const drawFrame = (now: number) => {
-        if (
-          now - lastDrawAt >= RECORDING_FRAME_INTERVAL_MS
-          && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
-        ) {
-          ctx.drawImage(video, 0, 0, recordingSize.width, recordingSize.height);
-          lastDrawAt = now;
+      try {
+        // rAF は表示リフレッシュ (60Hz 等) で回るが、描画は録画レートに間引く。
+        // captureStream(fps) はキャンバスが変化したときだけフレームを取るので、
+        // 描画しなければエンコードもされない = 録画中のタイピングを邪魔しない。
+        let lastDrawAt = -Infinity;
+        const drawFrame = (now: number) => {
+          if (
+            now - lastDrawAt >= RECORDING_FRAME_INTERVAL_MS
+            && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+          ) {
+            ctx.drawImage(video, 0, 0, recordingSize.width, recordingSize.height);
+            lastDrawAt = now;
+          }
+          recordingAnimationFrameRef.current = requestAnimationFrame(drawFrame);
+        };
+        drawFrame(performance.now());
+
+        const recordingStream = canvas.captureStream(RECORDING_FPS);
+        recordingStreamRef.current = recordingStream;
+
+        const options: MediaRecorderOptions = {
+          videoBitsPerSecond: RECORDING_VIDEO_BITS_PER_SECOND,
+        };
+        if (mimeType) {
+          options.mimeType = mimeType;
         }
-        recordingAnimationFrameRef.current = requestAnimationFrame(drawFrame);
-      };
-      drawFrame(performance.now());
 
-      const recordingStream = canvas.captureStream(RECORDING_FPS);
-      recordingStreamRef.current = recordingStream;
+        const recorder = new MediaRecorder(recordingStream, options);
+        mediaRecorderRef.current = recorder;
 
-      const options: MediaRecorderOptions = {
-        videoBitsPerSecond: RECORDING_VIDEO_BITS_PER_SECOND,
-        mimeType,
-      };
+        await startMediaRecorderWithConfirmation({
+          recorder,
+          onChunk: (chunk) => recordedChunksRef.current.push(chunk),
+          onCleanup: () => {
+            stopRecordingCapture();
+            if (mediaRecorderRef.current === recorder) {
+              mediaRecorderRef.current = null;
+            }
+          },
+          onAsyncError,
+        });
 
-      const recorder = new MediaRecorder(recordingStream, options);
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) recordedChunksRef.current.push(event.data);
-      };
-      recorder.start(1000);
-      mediaRecorderRef.current = recorder;
-
-      console.log(
-        `[Recording] Capturing ${sourceWidth}x${sourceHeight} as ` +
-        `${recordingSize.width}x${recordingSize.height} at ${RECORDING_FPS}fps ` +
-        `using ${recorder.mimeType || mimeType}.`
-      );
-    } catch (err) {
-      stopRecordingCapture();
-      mediaRecorderRef.current = null;
-      throw err;
-    }
-  }, [calibrationCameraSize, stopRecordingCapture, videoRef]);
+        console.log(
+          `[Recording] Capturing ${sourceWidth}x${sourceHeight} as ` +
+          `${recordingSize.width}x${recordingSize.height} at ${RECORDING_FPS}fps ` +
+          `using ${recorder.mimeType || mimeType || 'browser default'}.`
+        );
+      } catch (err) {
+        stopRecordingCapture();
+        mediaRecorderRef.current = null;
+        throw err;
+      }
+    },
+    [calibrationCameraSize, stopRecordingCapture, videoRef]
+  );
 
   const stopOfflineRecording = useCallback((): Promise<Blob | null> => (
     new Promise((resolve) => {

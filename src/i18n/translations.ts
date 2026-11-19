@@ -22,6 +22,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     'trainer.recordingUnavailable.noCanvasCaptureStream': '⚠️ This browser does not support canvas video capture (captureStream unavailable).',
     'trainer.recordingUnavailable.unsupportedMimeType': '⚠️ No supported video recording format (MIME type) was found in this browser.',
     'trainer.recordingStartFailed': 'Failed to start recording: {{reason}}',
+    'trainer.recordingFailed': 'Recording failed: {{reason}}',
 
     'analysis.unknown': 'Unable to judge',
     'dashboard.judgedKeystrokes': 'Judged keystrokes',
@@ -127,6 +128,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     'trainer.recordingUnavailable.noCanvasCaptureStream': '⚠️ このブラウザは録画用ストリームの生成に対応していません（canvas.captureStream が利用できません）。',
     'trainer.recordingUnavailable.unsupportedMimeType': '⚠️ このブラウザで利用できる録画形式（MIME type）が見つかりません。',
     'trainer.recordingStartFailed': '録画の開始に失敗しました: {{reason}}',
+    'trainer.recordingFailed': '録画に失敗しました: {{reason}}',
 
     'analysis.unknown': '判定不能',
     'dashboard.judgedKeystrokes': '判定できた打鍵',
