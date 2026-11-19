@@ -62,6 +62,7 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
 
   const [pressedKeyCode, setPressedKeyCode] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [isStartingRecording, setIsStartingRecording] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(() => (
     typeof window === 'undefined' ? 1200 : window.innerWidth
   ));
@@ -76,6 +77,7 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
   const sessionStartRef = useRef(0);
   const isMountedRef = useRef(true);
   const isStartingRecordingRef = useRef(false);
+  const activeRecordingModeRef = useRef<'offline' | 'realtime' | null>(null);
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -101,6 +103,7 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
   });
 
   const handleSetAnalysisMode = (mode: 'offline' | 'realtime') => {
+    if (isRecording || isStartingRecordingRef.current) return;
     setAnalysisMode(mode);
     localStorage.setItem('spartan_analysis_mode', mode);
   };
@@ -227,10 +230,12 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
     
     if (isRecording) {
       const recordingDurationMs = performance.now() - sessionStartRef.current;
+      const activeMode = activeRecordingModeRef.current ?? analysisMode;
+      activeRecordingModeRef.current = null;
       engineRef.current.stopSession();
       setIsRecording(false);
       
-      if (analysisMode === 'realtime') {
+      if (activeMode === 'realtime') {
         if (onSessionComplete) {
           const finalJson = engineRef.current.exportSession();
           onSessionComplete(JSON.parse(finalJson));
@@ -260,12 +265,14 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
       if (analysisMode === 'offline') {
         if (isStartingRecordingRef.current) return;
         isStartingRecordingRef.current = true;
+        setIsStartingRecording(true);
         try {
           await startOfflineSession({
             capability: recordingCapability,
             startRecording: () =>
               startOfflineRecording((err) => {
                 if (!isMountedRef.current) return;
+                activeRecordingModeRef.current = null;
                 engineRef.current?.stopSession();
                 setIsRecording(false);
                 showToast(
@@ -277,6 +284,7 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
             cleanupRecording: stopRecordingCapture,
             startTypingSession: () => {
               if (!isMountedRef.current) return;
+              activeRecordingModeRef.current = 'offline';
               sessionStartRef.current = performance.now();
               engineRef.current!.startSession();
               setIsRecording(true);
@@ -292,10 +300,14 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
           });
         } finally {
           isStartingRecordingRef.current = false;
+          if (isMountedRef.current) {
+            setIsStartingRecording(false);
+          }
         }
         return;
       }
 
+      activeRecordingModeRef.current = 'realtime';
       sessionStartRef.current = performance.now();
       engineRef.current.startSession();
       setIsRecording(true);
@@ -347,6 +359,7 @@ export const TrainerScreen: React.FC<TrainerScreenProps> = ({
         <TrainerControls
           hasCalibration={!!homography}
           isRecording={isRecording}
+          isStartingRecording={isStartingRecording}
           cameraSource={cameraSource}
           remoteStatus={remoteStatus}
           offer={offer}

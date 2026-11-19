@@ -151,16 +151,38 @@ export function useSessionRecorder({
     new Promise((resolve) => {
       const recorder = mediaRecorderRef.current;
       if (recorder && recorder.state !== 'inactive') {
+        let settled = false;
+        const finish = (blob: Blob | null) => {
+          if (settled) return;
+          settled = true;
+          recorder.onstop = null;
+          recorder.onerror = null;
+          stopRecordingCapture();
+          if (mediaRecorderRef.current === recorder) {
+            mediaRecorderRef.current = null;
+          }
+          resolve(blob);
+        };
+
+        const previousOnError = recorder.onerror;
+        recorder.onerror = (event) => {
+          previousOnError?.call(recorder, event);
+          finish(null);
+        };
+
         recorder.onstop = () => {
           const recordedMimeType = recorder.mimeType
             || recordedChunksRef.current.find((chunk) => chunk.type)?.type
             || 'video/webm';
           const blob = new Blob(recordedChunksRef.current, { type: recordedMimeType });
-          stopRecordingCapture();
-          mediaRecorderRef.current = null;
-          resolve(blob);
+          finish(blob);
         };
-        recorder.stop();
+
+        try {
+          recorder.stop();
+        } catch {
+          finish(null);
+        }
         return;
       }
 

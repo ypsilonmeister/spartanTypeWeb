@@ -10,6 +10,7 @@ import type { PracticeCategory } from '../../types/practice';
 interface TrainerControlsProps {
   hasCalibration: boolean;
   isRecording: boolean;
+  isStartingRecording?: boolean;
   cameraSource: CameraSource;
   remoteStatus: RemoteStatus;
   offer: string | null;
@@ -29,6 +30,7 @@ interface TrainerControlsProps {
 export const TrainerControls = ({
   hasCalibration,
   isRecording,
+  isStartingRecording = false,
   cameraSource,
   remoteStatus,
   offer,
@@ -45,8 +47,9 @@ export const TrainerControls = ({
   onToggleRecording,
 }: TrainerControlsProps) => {
   const { t } = useLanguage();
+  const isControlLocked = isRecording || isStartingRecording;
   const isOfflineUnavailable =
-    analysisMode === 'offline' && !isRecording && !recordingCapability.available;
+    analysisMode === 'offline' && !isControlLocked && !recordingCapability.available;
 
   return (
   <div className="trainer-control-panel">
@@ -56,7 +59,7 @@ export const TrainerControls = ({
       </div>
     )}
 
-    {!isRecording && (
+    {!isControlLocked && (
       <CameraSourceSelector
         source={cameraSource}
         onSourceChange={onCameraSourceChange}
@@ -75,7 +78,7 @@ export const TrainerControls = ({
         {(Object.keys(practiceCategoryLabels) as PracticeCategory[]).map(cat => (
           <button
             key={cat}
-            disabled={isRecording}
+            disabled={isControlLocked}
             onClick={() => onPracticeCategoryChange(cat)}
             className={`trainer-category-btn${practiceCategory === cat ? ' is-active' : ''}`}
           >
@@ -91,14 +94,14 @@ export const TrainerControls = ({
       </label>
       <div className="trainer-mode-toggle">
         <button
-          disabled={isRecording}
+          disabled={isControlLocked}
           onClick={() => onAnalysisModeChange('offline')}
           className={`trainer-mode-btn${analysisMode === 'offline' ? ' is-active' : ''}`}
         >
           {t('trainer.modeOffline')}
         </button>
         <button
-          disabled={isRecording}
+          disabled={isControlLocked}
           onClick={() => onAnalysisModeChange('realtime')}
           className={`trainer-mode-btn${analysisMode === 'realtime' ? ' is-active' : ''}`}
         >
@@ -120,7 +123,7 @@ export const TrainerControls = ({
 
     <button
       onClick={onToggleRecording}
-      disabled={(analysisMode === 'realtime' && !isWorkerReady) || isOfflineUnavailable}
+      disabled={(analysisMode === 'realtime' && !isWorkerReady) || isOfflineUnavailable || isStartingRecording}
       className={`trainer-record-btn${isRecording ? ' is-recording' : ''}`}
     >
       {isRecording ? t('trainer.stopBtn') : t('trainer.startBtn')}

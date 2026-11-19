@@ -137,7 +137,9 @@ export function startMediaRecorderWithConfirmation(
     const cleanup = () => {
       recorder.onstart = null;
       recorder.onerror = null;
-      recorder.onstop = null;
+      if (!started) {
+        recorder.onstop = null;
+      }
       onCleanup();
     };
 
