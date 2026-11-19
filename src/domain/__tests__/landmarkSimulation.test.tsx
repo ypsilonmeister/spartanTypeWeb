@@ -8,6 +8,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { parseKLE } from '../../utils/kleParser';
 import { LAYOUT_PRESETS } from '../../assets/layoutTemplates';
 import { HabitAnalyzer } from '../../components/dashboard/HabitAnalyzer';
+import { summarizeKeystrokes } from '../keystrokeStats';
 import type { KeystrokeLog } from '../../types/session';
 import {
   BASE_VARIANT,
@@ -72,7 +73,7 @@ function runVariant(variant: SimVariant, seed: number) {
 
 /** HabitAnalyzer を SSR で描画し、出たラベル名と回数を取り出す (本番コンポーネントそのもの)。 */
 function habitLabels(keystrokes: KeystrokeLog[]): Record<string, number> {
-  const html = renderToStaticMarkup(<HabitAnalyzer keystrokes={keystrokes} />);
+  const html = renderToStaticMarkup(<HabitAnalyzer wrongKeystrokes={summarizeKeystrokes(keystrokes).wrongKeystrokes} />);
   const out: Record<string, number> = {};
   const re = /<span class="habit-badge">([^<]+)<\/span>.*?<span class="habit-count">\((\d+) times\)<\/span>/g;
   for (const m of html.matchAll(re)) out[m[1]] = Number(m[2]);

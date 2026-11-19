@@ -2,10 +2,10 @@ import React, { useMemo } from 'react';
 import type { KeystrokeLog } from '../../types/session';
 
 interface HabitAnalyzerProps {
-  keystrokes: KeystrokeLog[];
+  wrongKeystrokes: readonly KeystrokeLog[];
 }
 
-export const HabitAnalyzer: React.FC<HabitAnalyzerProps> = ({ keystrokes }) => {
+export const HabitAnalyzer: React.FC<HabitAnalyzerProps> = ({ wrongKeystrokes }) => {
   const habits = useMemo(() => {
     const labels: { name: string, description: string, count: number }[] = [];
 
@@ -15,9 +15,7 @@ export const HabitAnalyzer: React.FC<HabitAnalyzerProps> = ({ keystrokes }) => {
     let indexOverreach = 0;
     let thumbErrors = 0;
 
-    keystrokes.forEach(ks => {
-      if (ks.isCorrectFinger) return;
-
+    wrongKeystrokes.forEach(ks => {
       const expected = Array.isArray(ks.expectedFinger) ? ks.expectedFinger[0] : ks.expectedFinger;
       const predicted = ks.predictedFinger;
 
@@ -48,7 +46,7 @@ export const HabitAnalyzer: React.FC<HabitAnalyzerProps> = ({ keystrokes }) => {
     if (thumbErrors > 2) labels.push({ name: 'Thumb Misuse', description: 'Pressing Space or Alt/Cmd with fingers other than thumb.', count: thumbErrors });
 
     return labels.sort((a, b) => b.count - a.count);
-  }, [keystrokes]);
+  }, [wrongKeystrokes]);
 
   return (
     <div className="dashboard-card habit-analyzer">

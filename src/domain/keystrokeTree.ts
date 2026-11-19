@@ -1,4 +1,5 @@
 import type { KeystrokeLog } from '../types/session';
+import { getKeystrokeVerdict } from './keystrokeStats';
 import type { TreeNodeView } from './practiceTree';
 
 /**
@@ -33,9 +34,10 @@ export function buildKeystrokeTreeView(
     const tally = getOrCreate(keys, keyLabel, () => ({ presses: 0, judged: 0, correct: 0 }));
 
     tally.presses += 1;
-    if (ks.isCorrectFinger !== undefined) {
+    const verdict = getKeystrokeVerdict(ks.isCorrectFinger);
+    if (verdict !== 'unknown') {
       tally.judged += 1;
-      if (ks.isCorrectFinger) tally.correct += 1;
+      if (verdict === 'correct') tally.correct += 1;
     }
   });
 
