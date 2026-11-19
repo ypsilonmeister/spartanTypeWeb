@@ -92,7 +92,7 @@ Worker 側にも `[AnalysisProfile] HandLandmarker delegate: ...` が単独で�
 
 | `frames.cropped` | 期待する手の側だけを切り出して推論したフレーム数 |
 | `frames.fullFrame` | 全体を両手で推論したフレーム数 (期待する手が不明・両手にまたがる・切り出し無効) |
-| `inference.fallbackToOtherHand` | 期待する手がキーに届いておらず、もう片方の手も推論したフレーム数 |
+| `inference.fallbackToOtherHand` | 期待する手だけでは判定を確定できず (期待指がキーの上 0.5U 以内で最近傍になっていない)、もう片方の手も推論したフレーム数 |
 | `inference.fallbackUnavailable` | 上のフォールバックが必要だったが、もう片方の切り出しが間に合わなかった回数 |
 | `targets.missedExpectedHand` | フォールバック無効時に、期待する手がキーに届いていなかった打鍵数 |
 
@@ -100,9 +100,15 @@ Worker 側にも `[AnalysisProfile] HandLandmarker delegate: ...` が単独で�
 (`domain/frameTargetSelector.ts`、F は `offlineAnalyzer.ts` の `FRAME_TARGET_OPTIONS`)。
 さらに打鍵から期待する手が分かるときは、その手が写っている側だけを切り出して
 `numHands: 1` で推論する (`domain/frameCrop.ts`、設定は `offlineAnalyzer.ts` の
-`EXPECTED_HAND_CROP`)。期待する手のどの指もキーから 1.5U 以上離れていれば
-(逆の手で打った等)、もう片方の側も推論して両手ぶん合成するので、
-「手が違う」判定は残る。
+`EXPECTED_HAND_CROP`)。期待する手だけで判定を確定するのは、期待指が最近傍で、
+かつキーの上 (0.5U 以内、`frameCrop.needsOtherHandInference`) にあるときだけ。
+それ以外 (逆の手で打った・別の指で打った・ずれが大きい等) は、もう片方の側も推論して
+両手ぶん合成してから判定する。以前の「期待する手のどれかの指が 1.5U 以内なら確定」は、
+ホームで休んでいる指が隣の段・列のキーから 1.0〜1.25U にあるため、逆の手で打った
+G/T/V 等が正解に化けていた (Issue #21)。
+キャリブレーションがずれて期待指がキー中心から 0.5U 以上離れて写る環境では、ほぼ全打鍵で
+もう片方も推論するので、`inference.fallbackToOtherHand / frames.cropped` が高ければ
+キャリブレーションのやり直しを疑う。
 目標フレームが来たのにキューが埋まっていればフレームを捨てず video を止めて待つので、
 `frames.waitedForSlot` と `wait.pausedMs` が「推論が再生に追いつかなかった量」を表す。
 

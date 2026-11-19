@@ -76,7 +76,7 @@
 
 ## 届かなかった範囲 (継ぎ目の制約)
 
-- **`offlineAnalyzer.ts` (infra)**: 動画デコード、ワーカー、`frameTargetSelector` とフレームの切り抜き (`cropRectForHand`)、期待した手が写っているかによるフレーム選択は、Blob / Canvas / Worker に依存していて、純粋関数の継ぎ目がない。このため模擬経路には入っていない。模擬経路は、その下にある `TypingSession` から先だけ。
+- **`offlineAnalyzer.ts` (infra)**: 動画デコード、ワーカー、`frameTargetSelector` とフレームの切り抜き (`cropRectForHand`)、期待した手が写っているかによるフレーム選択は、Blob / Canvas / Worker に依存していて、純粋関数の継ぎ目がない。このため模擬経路には入っていない。模擬経路は、その下にある `TypingSession` から先だけ。ただし「期待する手だけの推論結果で判定を確定してよいか」の判断は `frameCrop.needsOtherHandInference` に切り出してあり、`simulation/pipeline.ts` の `runThroughCropPipeline` が切り出し経路を模擬して `crossHandCrop.test.ts` で検証している (Issue #21)。
 - **スプリット配列 / 36 キー配列**: 試作は `us-standard` だけ。ジェネレータは `findTargetKey` で座標を引くので、配列を差し替えることはできる。ただし、スプリット配列のキャリブレーション (左右別の行列) とコンパクト配列の列による指推定は未検証。
 - **リアルタイム経路** (`useRealtimeFeedback`): React フックなので対象外。判定関数 (`analyzeKeystrokeRealtime` → `analyzeKeystrokeAgainstTips`) は同じもの。
 

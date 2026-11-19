@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   cropRectForHand,
+  DEFAULT_OTHER_HAND_FALLBACK,
   expectedHandForKeystroke,
+  needsOtherHandInference,
   otherHand,
   uncropHands,
 } from '../frameCrop';
 import { landmarkToScreen } from '../handGeometry';
+import { findTargetKey } from '../fingerAnalysis';
 import { parseKLE } from '../../utils/kleParser';
 import { LAYOUT_PRESETS } from '../../assets/layoutTemplates';
 
@@ -87,5 +90,45 @@ describe('uncropHands', () => {
       100
     );
     expect(hand.handedness).toBe('Left');
+  });
+});
+
+describe('needsOtherHandInference', () => {
+  const center = (code: string) => {
+    const k = findTargetKey(usStandard, code);
+    if (!k) throw new Error(code);
+    return { x: k.x + k.w / 2, y: k.y + k.h / 2 };
+  };
+  const leftHome = {
+    LeftIndex: center('KeyF'),
+    LeftMiddle: center('KeyD'),
+    LeftRing: center('KeyS'),
+    LeftPinky: center('KeyA'),
+  };
+  const needs = (code: string, tips: Record<string, { x: number; y: number }>) =>
+    needsOtherHandInference(usStandard, code, tips, DEFAULT_OTHER_HAND_FALLBACK);
+
+  it('settles a stroke when the expected finger is on the key', () => {
+    const g = center('KeyG');
+    expect(needs('KeyG', { ...leftHome, LeftIndex: { x: g.x + 0.1, y: g.y - 0.1 } })).toBe(false);
+  });
+
+  it('does not settle G/T/V just because the resting left index is within 1.0-1.25U (Issue #21)', () => {
+    expect(needs('KeyG', leftHome)).toBe(true);
+    expect(needs('KeyT', leftHome)).toBe(true);
+    expect(needs('KeyV', leftHome)).toBe(true);
+  });
+
+  it('does not settle a stroke whose nearest finger is a different one of the expected hand', () => {
+    const d = center('KeyD');
+    expect(needs('KeyD', { ...leftHome, LeftIndex: d, LeftMiddle: { x: d.x - 0.8, y: d.y } })).toBe(true);
+  });
+
+  it('asks for the other hand when the expected hand was not detected', () => {
+    expect(needs('KeyG', {})).toBe(true);
+  });
+
+  it('never asks for the other hand when the key is not on the layout', () => {
+    expect(needs('F24', leftHome)).toBe(false);
   });
 });

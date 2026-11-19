@@ -72,7 +72,7 @@ export function createRng(seed: number): Rng {
 // 台本
 // ---------------------------------------------------------------------------
 
-export type StrokeKind = 'correct' | 'indexOverreach' | 'pinkyAvoidance';
+export type StrokeKind = 'correct' | 'indexOverreach' | 'pinkyAvoidance' | 'crossHand';
 
 export interface ScriptStroke {
   /** KeyboardEvent.code */
@@ -117,6 +117,15 @@ export function pinkyAvoidanceStroke(code: string): ScriptStroke {
   const expected = standardFinger(code);
   if (!expected.endsWith('Pinky')) throw new Error(`${code} is not a pinky key`);
   return { code, finger: expected.replace('Pinky', 'Ring'), kind: 'pinkyAvoidance' };
+}
+
+/** 期待する手と逆の手の同じ指で打つ (例: G を右人差し指で)。もう片方の手はホームで休む。 */
+export function crossHandStroke(code: string): ScriptStroke {
+  const expected = standardFinger(code);
+  const finger = expected.startsWith('Left')
+    ? expected.replace('Left', 'Right')
+    : expected.replace('Right', 'Left');
+  return { code, finger, kind: 'crossHand' };
 }
 
 export interface ScriptOptions {
@@ -337,6 +346,7 @@ function buildHand(
 
 export interface SimFrame {
   timestamp: number;
+  /** 常に [ユーザーの左手, ユーザーの右手] の順 (切り出し推論の模擬が「どちらの手か」を引くのに使う)。 */
   hands: HandData[];
 }
 

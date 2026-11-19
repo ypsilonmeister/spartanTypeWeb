@@ -10,8 +10,9 @@
  * ここは純関数のみ。DOM も MediaPipe も知らない。
  */
 import type { KeyboardLayout } from '../types/kle';
+import type { Point } from '../types/geometry';
 import type { HandSide } from '../types/session';
-import { findTargetKey, getExpectedFinger } from './fingerAnalysis';
+import { analyzeKeystrokeAgainstTips, findTargetKey, getExpectedFinger } from './fingerAnalysis';
 
 /** 画像内の矩形 (ピクセル、左上原点)。 */
 export interface CropRect {
@@ -89,4 +90,48 @@ export function uncropHands<T extends HandLike>(
       y: (rect.y + landmark.y * rect.height) / frameHeight,
     })),
   }));
+}
+
+/** 期待する手だけの推論結果から、もう片方の手も推論すべきかを決めるしきい値。 */
+export interface OtherHandFallbackOptions {
+  /**
+   * 期待指の指先がキー中心からこれ以内にあれば「期待どおりの指で打った」と確定し、
+   * もう片方の手は推論しない。
+   */
+  confidentDistanceU: number;
+}
+
+/**
+ * offlineAnalyzer が使う既定値。
+ *
+ * 0.5U はキーの内接円 (半径 0.5U) の大きさで、「期待指がそのキーの上にある」という意味。
+ * ホームで休んでいる指は隣の段・列のキーまで 1.0〜1.25U 離れているので (Issue #21)、
+ * 休んでいるだけの指はこの条件を満たさない。
+ */
+export const DEFAULT_OTHER_HAND_FALLBACK: OtherHandFallbackOptions = {
+  confidentDistanceU: 0.5,
+};
+
+/**
+ * 期待する手だけを推論した結果 (mappedTips) では、この打鍵の判定を確定できないか。
+ * true ならもう片方の手も推論して合成する。
+ *
+ * 確定してよいのは「期待指が最近傍で、かつキーの上 (confidentDistanceU 以内) にある」
+ * ときだけ。以前は「期待する手のどれかの指先が 1.5U 以内にいれば確定」だったため、
+ * 左手がホームに休んだまま右手で G/T/V を打つと、休んでいる左人差し指が 1.0〜1.25U に
+ * いるだけで正解になっていた (Issue #21)。片手しか見ていない結果で「不正解」や
+ * 「判定不能」を確定させないのは、もう片方の手のほうがキーに近い可能性が残るため。
+ *
+ * レイアウトにキーが無ければ判定不能なので false (フォールバックしても意味がない)。
+ */
+export function needsOtherHandInference(
+  layout: KeyboardLayout,
+  code: string,
+  mappedTips: Record<string, Point>,
+  options: OtherHandFallbackOptions
+): boolean {
+  const analysis = analyzeKeystrokeAgainstTips(layout, code, mappedTips);
+  if (analysis === null) return false;
+  const settled = analysis.isCorrectFinger === true && analysis.distanceU <= options.confidentDistanceU;
+  return !settled;
 }
